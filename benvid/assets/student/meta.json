@@ -1,0 +1,9 @@
+{
+ "preset": "ir1",
+ "step": 1185035,
+ "run": "irnm1",
+ "sha": "3b33a843c836fdde",
+ "teacher": "ink5.ultra (method=5)",
+ "min_h": 48,
+ "note": "best.pt EMA; студент наближає Ультра, не дорівнює йому"
+}

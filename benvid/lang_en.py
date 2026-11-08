@@ -1,0 +1,336 @@
+"""Англійські переклади інтерфейсу. Ключ - українське формулювання з коду (i18n.tr), значення - англійське.
+Підстановки {x} мусять збігатися з ключем (перевіряє tests/test_i18n.py); форми множини - через «|» (i18n.tn)."""
+from __future__ import annotations
+
+EN: dict[str, str] = {
+    # --- шапка, кнопки, підказки нижньої панелі
+    "Відкрити": "Open",
+    "Стоп": "Stop",
+    "Зберегти…": "Save…",
+    "Зберегти GIF": "Save GIF",
+    "Зберегти фото": "Save photo",
+    "Цикл": "Loop",
+    "Кадр → фото": "Frame → photo",
+    "Українська": "Українська",
+    "English": "English",
+    "Кадр назад   [←]": "Previous frame   [←]",
+    "Кадр уперед   [→]": "Next frame   [→]",
+    "−10 с   [Shift + ←]": "−10 s   [Shift + ←]",
+    "+10 с   [Shift + →]": "+10 s   [Shift + →]",
+    "Відтворення / пауза   [Пробіл]": "Play / pause   [Space]",
+    "Стоп: на початок   [Home]": "Stop: back to the start   [Home]",
+    "Звук: вимкнути / увімкнути   [M]": "Sound: mute / unmute   [M]",
+    "Гучність   [↑ ↓]  або колесо миші": "Volume   [↑ ↓]  or the mouse wheel",
+    "Повтор: після кінця починати спочатку   [L]": "Loop: start over after the end   [L]",
+    "Зберегти поточний кадр окремим фото": "Save the current frame as a photo",
+    "Перемотування. Прапорці [ ] над шкалою — фрагмент для збереження": "Seek bar. The [ ] flags above it mark the part to save",
+    "Відкрити відео, GIF або фото   [Ctrl + O]": "Open a video, GIF or photo   [Ctrl + O]",
+    "Зберегти результат   [Ctrl + S]": "Save the result   [Ctrl + S]",
+    "Зупинити збереження": "Cancel saving",
+    "Гайд, клавіші, про програму   [F1]": "Guide, keys, about   [F1]",
+    "— файл не відкрито —": "— no file open —",
+    "Відкрий відео, GIF або фото\nабо просто перетягни файл у це вікно": "Open a video, GIF or photo\nor simply drop a file into this window",
+    "   0 — вписати": "   0 — fit",
+
+    # --- права панель
+    "Якість": "Quality",
+    "крупно": "coarse",
+    "дрібно": "fine",
+    "Щільність знаків": "Character density",
+    "{c}×{r} · клітинка {cw}×{ch} px": "{c}×{r} · cell {cw}×{ch} px",
+    "Щільність знаків: розмір знака 32×64, 16×32 або 8×16 px. Чим дрібніше, тим більше знаків уміщається в той самий кадр і тим довше рахується":
+        "Character density: glyph size 32×64, 16×32 or 8×16 px. The finer, the more characters fit in the same frame and the longer it takes to render",
+    "швидко": "fast",
+    "якісно": "quality",
+    "Баланс «швидкість ↔ якість»: п'ять рівнів. Чим вище, тим більше роботи на кадр. Ромб справа - IRNM1 (InkreelNeuralModel v1): не шостий щабель, а окрема гілка (навчена нейромережа на відеокарті); у «Символах» її нема":
+        "Speed ↔ quality balance: five levels. The higher, the more work per frame. The diamond on the right is IRNM1 (InkreelNeuralModel v1): not a sixth step but a separate branch (a trained neural network on the graphics card); it is not available in “Symbols”",
+    "IRNM1 тут недоступна (немає нейромережі чи onnxruntime): рахується як «Гравюра»":
+        "IRNM1 is unavailable here (no neural network or onnxruntime): it is rendered as “Engraving”",
+    "Розмір результату": "Output size",
+    "Авто": "Auto",
+    "Джерело": "Source",
+    "Як у джерела": "Same as source",
+    "Найбільший розмір, який ПК тягне в реальному часі на обраному рівні якості":
+        "The largest size your PC can play in real time at the chosen quality level",
+    "Розмір оригіналу": "Original size",
+    "свій:": "custom:",
+    "авто": "auto",
+    " · {f:.3f} к/с": " · {f:.3f} fps",
+    "→ {tag}{w}×{h}\nджерело {src}": "→ {tag}{w}×{h}\nsource {src}",
+    "→ {tag}{w}×{h} · {c}×{r} символів ({cw}×{ch} px)\nджерело {src}": "→ {tag}{w}×{h} · {c}×{r} characters ({cw}×{ch} px)\nsource {src}",
+    "свій розмір: ціле число 2…4096 (ширина, висота або обидві)": "custom size: a whole number 2…4096 (width, height or both)",
+    "Палітра": "Palette",
+    "Попередня палітра": "Previous palette",
+    "Наступна палітра": "Next palette",
+    "Навпаки: туш і папір міняються місцями   [I]": "Reverse: ink and paper swap places   [I]",
+    "Вид": "View",
+    "Дві полярності": "Two polarities",
+    "Розфокус": "Defocus",
+    "Дві полярності: той самий кадр позитивом ліворуч і негативом праворуч, межа — плавна S-крива. Лише перегляд":
+        "Two polarities: the same frame as a positive on the left and a negative on the right, the line between them a smooth S-curve. View only",
+    "Положення межі. Над картинкою межа йде за курсором": "Position of the line. Over the picture the line follows the cursor",
+    "Розфокус: чорне й біле плавно розмиваються в півтони. Лише перегляд": "Defocus: black and white blur smoothly into shades. View only",
+    "Експорт": "Export",
+    "Висока": "High",
+    "Середня": "Medium",
+    "Мала": "Low",
+    "Якість кодування. «Висока» - програмний x264 без поспіху; «Середня» й «Мала» - апаратне кодування відеокарти, швидше й менші файли":
+        "Encoding quality. “High” uses software x264 and takes its time; “Medium” and “Low” use the graphics card's hardware "
+        "encoder: faster, smaller files",
+    "Звук": "Sound",
+    "Кадри: як в оригіналі ({f:g} к/с)": "Frames: as in the original ({f:g} fps)",
+    "Кадри: як в оригіналі": "Frames: as in the original",
+    "Кадри: {f} к/с": "Frames: {f} fps",
+    "Кадрів на секунду в результаті: виберіть зі списку або впишіть своє число (Enter). «Як в оригіналі» - без змін; нижче значення - легший файл і швидший розрахунок: кадри беруться за часом, тривалість і звук лишаються":
+        "Frames per second of the result: pick one from the list or type your own number (Enter). “As in the original” changes nothing; a lower value means a lighter file and a faster render: frames are picked by time, the length and the sound stay the same",
+    "Весь": "All",
+    "Додати до файлу звук оригіналу": "Include the original sound in the file",
+    "Скинути фрагмент: зберігати все відео": "Reset the range: save the whole video",
+    "Права панель: сховати / показати": "Right panel: hide / show",
+    "Розмір піднято до одного символа: {w}×{h}": "Size raised to one symbol: {w}×{h}",
+    "Фрагмент: усе відео\n[ ] — межі фрагмента": "Range: whole video\n[ ] — range limits",
+    "Фрагмент: {a} – {b}\n({d}, {n})": "Range: {a} – {b}\n({d}, {n})",
+    "{n} кадр|{n} кадри|{n} кадрів": "{n} frame|{n} frames",
+    "Експорт: усе пораховано — миттєво": "Export: all computed — instant",
+    "Експорт ≈ {t}  (готово {p}%)": "Export ≈ {t}  ({p}% ready)",
+
+    # --- рядок стану
+    "ФОТО {w}×{h}": "PHOTO {w}×{h}",
+    "відтворення": "playing",
+    "буферизація…": "buffering…",
+    "пауза": "paused",
+    "готово": "done",
+    "обробка…": "processing…",
+    "запас {s:.1f} с": "buffered {s:.1f} s",
+    "кожен {n}-й": "1 of {n} frames",
+    "обробка {r:.0f} к/с": "rendering {r:.0f} fps",
+    "файл {f:.2f} к/с": "file {f:.2f} fps",
+    "без звуку": "no sound",
+    "немає sounddevice": "no sounddevice",
+    "немає доріжки": "no audio track",
+    "завантаження…": "loading…",
+    "ок": "ok",
+    "встанови sounddevice (pip install sounddevice)": "install sounddevice (pip install sounddevice)",
+
+    # --- діалоги й повідомлення
+    "Відкрити відео, GIF або фото": "Open a video, GIF or photo",
+    "Усі медіа": "All media",
+    "Усі файли": "All files",
+    "Відео": "Video",
+    "Фото": "Photo",
+    "Не вдалося відкрити файл:\n{e}\n\nДеталі: {p}": "Could not open the file:\n{e}\n\nDetails: {p}",
+    "Перетягни файл (відео, GIF або фото), а не теку": "Drop a file (video, GIF or photo), not a folder",
+    "Іде експорт — спершу дочекайся завершення або натисни Стоп": "Saving is in progress — wait for it to finish or press Stop first",
+    "Відкрито перший із {n}": "Opened the first of {n}",
+    "Зберегти кадр як фото": "Save the frame as a photo",
+    "Кадр збережено:\n{p}\nклік — відкрити теку": "Frame saved:\n{p}\nclick to open the folder",
+    "Помилка: {e}": "Error: {e}",
+    "Тека для PNG-кадрів": "Folder for the PNG frames",
+    "Зберегти як": "Save as",
+    "Не можна зберегти поверх оригіналу — вибери інше ім'я": "Cannot overwrite the original — pick another name",
+    "Готово: {frames} · {w}×{h} · {mb:.1f} МБ\n{p}\nклік — відкрити теку": "Done: {frames} · {w}×{h} · {mb:.1f} MB\n{p}\nclick to open the folder",
+    "Скасовано": "Cancelled",
+    "Помилка: {e}\n(деталі: {p})": "Error: {e}\n(details: {p})",
+    "Обробка": "Processing",
+    "Обробка й кодування": "Processing and encoding",
+    "Запуск обробки": "Starting up",
+    "{lab}  {pct:3.0f}%\nминуло {el}  залишилось ~{eta}": "{lab}  {pct:3.0f}%\nelapsed {el}  ~{eta} left",
+    "{lab}  {pct:3.0f}%\nминуло {el}": "{lab}  {pct:3.0f}%\nelapsed {el}",
+    "{lab}  {pct:3.0f}%\nминуло {el}  залишилось ~{eta}\nкадр {cur}/{tot} · {fps:.1f} к/с":
+        "{lab}  {pct:3.0f}%\nelapsed {el}  ~{eta} left\nframe {cur}/{tot} · {fps:.1f} fps",
+    "ПАУЗА  {pct:3.0f}%\nминуло {el}\n[Пробіл] — продовжити": "PAUSED  {pct:3.0f}%\nelapsed {el}\n[Space] — resume",
+    "Пауза / продовження рендеру   [Пробіл]": "Pause / resume rendering   [Space]",
+    # --- плашка на екрані: що програма робить просто зараз
+    "РЕНДЕР · кадр {cur}/{tot}": "RENDERING · frame {cur}/{tot}",
+    "РЕНДЕР · {pct:.0f}%": "RENDERING · {pct:.0f}%",
+    "ПАУЗА · {pct:.0f}%": "PAUSED · {pct:.0f}%",
+    "ГОТУЮ ГРАВЮРУ… перший запуск довший": "PREPARING ENGRAVING… the first run takes longer",
+    "ГОТУЮ IRNM1… перший запуск довший": "PREPARING IRNM1… the first run takes longer",
+    "ГОТУЮ IRNM1… перевіряю {b}": "PREPARING IRNM1… checking {b}",
+    "ГОТУЮ СИМВОЛИ… перший запуск довший": "PREPARING SYMBOLS… the first run takes longer",
+    "БУФЕРИЗАЦІЯ · {have}/{need} кадрів": "BUFFERING · {have}/{need} frames",
+    "ОБРОБКА…": "PROCESSING…",
+    "ПК не встигає · кожен {n}-й кадр": "PC is too slow · 1 of {n} frames shown",
+    "⚠ {note}": "⚠ {note}",
+
+    # --- футер
+    "Гайд та інфо": "Guide & info",
+    "…розфокусуй погляд": "…defocus your gaze",
+    "Пригостити автора печивом": "Buy the author a cookie",
+    "Подякувати автору печивом": "Thank the author with a cookie",
+    "Скоро тут з'являться посилання": "Links will appear here soon",
+    "Нагору": "To top",
+    "немає": "none",
+    "Старт": "Start",
+    "Клавіші": "Keys",
+    "Палітри": "Palettes",
+    "Формати": "Formats",
+    "Про програму": "About",
+    "Літерні клавіші (M, L, F, I) працюють в будь-якій розкладці.": "Letter keys (M, L, F, I) work in any keyboard layout.",
+    "Тут сховано кілька дрібниць — клікай не лише по кнопках.":
+        "A few small things are hidden here — click more than just the buttons.",
+    "Ням!": "Yum!",
+    "Пробіл": "Space",
+    "Колесо · + −": "Wheel · + −",
+    "Тягни мишею": "Drag",
+    "Клік · 2× клік": "Click · 2× click",
+    "Колесо над ♪": "Wheel over ♪",
+    "П'ять рівнів — від швидкості до якості; шостий (ромб праворуч) — окрема гілка. У вікні показується лише кодова назва поточного.":
+        "Five levels — from speed to quality; the sixth (the diamond on the right) is a separate branch. The window shows only the codename of the current one.",
+    "Чим вищий рівень, тим більше роботи на кадр. «Авто» підбирає розмір, який твій ПК встигає в реальному часі; для збереження файлу поспіху нема — бери «Гравюру».":
+        "The higher the level, the more work per frame. “Auto” picks a size your PC can handle in real time; when saving a file there is no hurry — choose “Engraving”.",
+    "Зберегти": "Save",
+    "HEIC/HEIF — з пакетом pillow-heif; якщо щось не відкривається, глянь лог (див. «Про програму»).":
+        "HEIC/HEIF — with the pillow-heif package; if something does not open, check the log (see “About”).",
+    "Працює офлайн: файли не залишають твій комп'ютер. Без реклами й збору даних.":
+        "Works offline: your files never leave your computer. No ads, no data collection.",
+    "Автор: {a}": "Author: {a}",
+    "Сайт: {s}": "Website: {s}",
+    "Зв'язок: {c}": "Contact: {c}",
+    "Використано: Python, Tk, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.":
+        "Built with: Python, Tk, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.",
+    "Журнал помилок: {p}": "Error log: {p}",
+    "Ліцензії компонентів: THIRD_PARTY_NOTICES.md у теці програми.":
+        "Component licences: THIRD_PARTY_NOTICES.md in the program folder.",
+
+    # --- швидка дія з Провідника (benvid/quick.py)
+    "Підготовка…": "Preparing…",
+    "Перетворюю: {name}": "Converting: {name}",
+    "{i} з {n}": "{i} of {n}",
+    "Скасувати": "Cancel",
+    "Закрити": "Close",
+    "Готово": "Done",
+    "Не вдалося: {name}\n{e}": "Failed: {name}\n{e}",
+
+    # --- фрази котушки-пасхалки (benvid/eggs.py)
+    "Кожен піксель — маленький вибір: туш чи папір.": "Every pixel is a small choice: ink or paper.",
+    "Розфокусуй погляд — і побачиш відтінки.": "Defocus your gaze — and you will see the shades.",
+    "Двадцять чотири кадри на секунду — і світ рухається.": "Twenty-four frames a second — and the world moves.",
+    "Ніч — найкращий час для чорно-білого.": "Night is the best time for black and white.",
+    "Не знаєш, що обрати — спробуй «Гравюру».": "Can't decide? Try “Engraving”.",
+    "Я лише котушка, але вірю в тебе.": "I'm just a reel, but I believe in you.",
+    "Менше кольору — більше змісту.": "Less colour — more meaning.",
+    "Тут усе пахне друкарською фарбою.": "It all smells of printer's ink in here.",
+    "Крутиться плівка, крутиться…": "The reel keeps turning, turning…",
+    "Сіре — це просто багато чорних крапок.": "Grey is just a lot of black dots.",
+
+    # --- рівні якості (core.METHODS / METHOD_INFO)
+    "Ескіз": "Sketch",
+    "Контур": "Outline",
+    "Півтон": "Halftone",
+    "Малюнок": "Drawing",
+    "Гравюра": "Engraving",
+    "найшвидше: один поріг на весь кадр": "fastest: one threshold for the whole frame",
+    "«Чорнило» (штрихи й крапки) та «Символи» (знаки шрифту, Consolas) — два погляди на той самий кадр; рівні, «Авто», палітри й експорт спільні.":
+        "“Ink” (strokes and dots) and “Symbols” (font characters, Consolas) are two views of the same frame; levels, “Auto”, palettes and export are shared.",
+    "У режимі «Символи» фото (й кадр) можна зберегти текстом .txt: світлі ділянки — густі знаки, відкривай у моноширинному шрифті на темному тлі.":
+        "In “Symbols” mode a photo (or a frame) can be saved as .txt text: light areas are dense characters, so open it in a monospaced font on a dark background.",
+    "Чорнило": "Ink",
+    "Символи": "Symbols",
+    "Чорнило: кадр малюється штрихами, крапками й зерном": "Ink: the frame is drawn with strokes, dots and grain",
+    "Символи: кадр складається зі знаків шрифту (як текст у консолі); ті самі п'ять рівнів якості":
+        "Symbols: the frame is built from font characters (like text in a console); the same five quality levels",
+    "Текст (.txt, символи)": "Text (.txt, symbols)",
+    "найшвидше: знак за яскравістю клітинки": "fastest: a character by the brightness of its cell",
+    "швидко: сходинки густини чергуються, тон точніший": "fast: density steps alternate, tone is more accurate",
+    "збалансовано: 8 відтінків, знак за формою - лінії, краї, рамки": "balanced: 8 shades, a character by shape - lines, edges, frames",
+    "якісно: 16 відтінків, ще літери й кирилиця, найточніший тон": "high quality: 16 shades, letters and Cyrillic too, the most accurate tone",
+    "найякісніше: 32 відтінки, весь шрифт, без мерехтіння у відео": "best: 32 shades, the whole font, no flicker in video",
+    "швидко: поріг за околом, добре для ліній і тексту": "fast: a local threshold, good for lines and text",
+    "збалансовано: напівтони шумом, як у газеті": "balanced: halftones as noise, like in a newspaper",
+    "якісно: штрихи, крапки й зерно за змістом": "high quality: strokes, dots and grain chosen by content",
+    "найякісніше: штрихи йдуть за формою, текст чіткий, без мерехтіння": "finest: strokes follow the shapes, text stays crisp, no flicker",
+    "InkreelNeuralModel v1 — окрема гілка, не вищий рівень: нейромережа, у рази швидше": "InkreelNeuralModel v1 — a separate branch, not a higher level: a neural network, much faster",
+
+    # --- формати
+    "PNG-послідовність": "PNG sequence",
+    "JSON (стиснутий)": "JSON (compressed)",
+    "PNG (1 біт)": "PNG (1-bit)",
+    "TIFF (1 біт, G4)": "TIFF (1-bit, G4)",
+    "WebP (без втрат)": "WebP (lossless)",
+
+    # --- палітри
+    "Класика": "Classic",
+    "Туш і папір": "Ink & paper",
+    "Сепія": "Sepia",
+    "Газета": "Newsprint",
+    "Кармін": "Carmine",
+    "Плакат": "Poster",
+    "Апельсин": "Orange",
+    "Бурштин": "Amber",
+    "Захід": "Sunset",
+    "Фламінго": "Flamingo",
+    "Неон": "Neon",
+    "Фіалка": "Violet",
+    "Лаванда": "Lavender",
+    "Кіберпанк": "Cyberpunk",
+    "Синька": "Cyanotype",
+    "Лід": "Ice",
+    "Бірюза": "Turquoise",
+    "М'ята": "Mint",
+    "Термінал": "Terminal",
+    "Ретро LCD": "Retro LCD",
+
+    # --- повідомлення про помилки з video.py / media.py
+    "файл пошкоджений — показано те, що вдалося відновити": "the file is damaged — showing what could be recovered",
+    "кадри зменшено, щоб вмістилися в пам'ять": "frames were reduced to fit in memory",
+    "файл не знайдено: {name}": "file not found: {name}",
+    "{name}: файл порожній": "{name}: the file is empty",
+    "{name}: файл недописаний або пошкоджений (запис було перервано)":
+        "{name}: the file is incomplete or damaged (the recording was interrupted)",
+    "{name}: у файлі лише звук, відео немає": "{name}: the file has sound only, no video",
+    "{name}: не вдалося відкрити відео (немає ffmpeg для запасного декодера: pip install imageio-ffmpeg)":
+        "{name}: could not open the video (no ffmpeg for the fallback decoder: pip install imageio-ffmpeg)",
+    "{name}: не вдалося відкрити — невідомий формат або файл пошкоджений":
+        "{name}: could not open — unknown format or damaged file",
+    "{name}: не вдалося прочитати кадри (пошкоджений файл чи непідтримуваний кодек)":
+        "{name}: could not read any frames (damaged file or unsupported codec)",
+    "не вдалося прочитати відео (пошкоджений файл чи непідтримуваний кодек)":
+        "could not read the video (damaged file or unsupported codec)",
+    "не розумію розмір {key}: очікується 320x180, 320x або x180":
+        "cannot understand the size {key}: expected 320x180, 320x or x180",
+    "для цього формату потрібен ffmpeg: pip install imageio-ffmpeg": "this format needs ffmpeg: pip install imageio-ffmpeg",
+    "не вдалося відкрити VideoWriter": "could not open VideoWriter",
+    "ffmpeg завершився з помилкою": "ffmpeg finished with an error",
+    "ffmpeg не зміг закодувати відео": "ffmpeg could not encode the video",
+    " (спробуй без апаратного кодування)": " (try without hardware encoding)",
+    "{name}: для HEIC/HEIF потрібен пакет pillow-heif (pip install pillow-heif)":
+        "{name}: HEIC/HEIF needs the pillow-heif package (pip install pillow-heif)",
+    "не вдалося прочитати зображення {name}: формат не підтримується або файл пошкоджений ({err})":
+        "could not read the image {name}: unsupported format or damaged file ({err})",
+    "Відкрити в InkReel": "Open in InkReel",
+    "Зробити чорно-біле (InkReel)": "Make black-and-white (InkReel)",
+    "Меню Провідника є лише у Windows.": "The Explorer menu exists only on Windows.",
+    "Збірка з Microsoft Store не може додати пункти в меню Провідника: відкривайте файли через «Відкрити за допомогою».":
+        "The Microsoft Store version cannot add Explorer menu items: open files with “Open with”.",
+    "Пункти меню додаються із зібраної програми: запустіть InkReel.exe --register-menu (збірка - scripts\\build_exe.bat).":
+        "The menu items are added from the built app: run InkReel.exe --register-menu (build it with scripts\\build_exe.bat).",
+    "Не вдалося записати в реєстр: {e}": "Could not write to the registry: {e}",
+    "Готово: у меню правої кнопки для фото й GIF з'явились «Відкрити в InkReel» і «Зробити чорно-біле (InkReel)». "
+    "У Windows 11 вони під «Показати додаткові параметри».":
+        "Done: the right-click menu for photos and GIFs now has “Open in InkReel” and “Make black-and-white (InkReel)”. "
+        "In Windows 11 they are under “Show more options”.",
+    "Пункти InkReel прибрано з меню правої кнопки.": "The InkReel items were removed from the right-click menu.",
+    "InkReel (.ikr, без втрат)": "InkReel (.ikr, lossless)",
+    "Звичайний режим": "Normal mode",
+    "Порахувати все": "Render all",
+    "Порахувати все й зберегти як": "Render all and save as",
+    "ЗАМОК": "LOCKED",
+    "Звичайний режим: оригінал відкрито, налаштування файлу повернуто": "Normal mode: the original is open, the file's settings restored",
+    "Режим замка: кадри вже пораховані. Щоб змінити налаштування, натисни «Звичайний режим»":
+        "Lock mode: the frames are already computed. To change the settings, press “Normal mode”",
+    "Готово: усе відео пораховане, нічого не перераховується.\n«Звичайний режим» — повернутись до оригіналу":
+        "Done: the whole video is computed, nothing is recomputed.\n“Normal mode” returns to the original",
+    "не вдалося відкрити готовий файл .ikr": "could not open the finished .ikr file",
+    "закриття: крок не вдався": "closing: a step failed",
+    "закриття: вікно не знищено": "closing: the window was not destroyed",
+    "Звичайний режим: повернутись до оригіналу цього відео з тими самими налаштуваннями. Уже пораховані кадри лишаються":
+        "Normal mode: return to the original of this video with the same settings. Frames already computed are kept",
+    "Порахувати все: обробити все відео наперед і зберегти у файл .ikr (без втрат). Він відкриється в режимі замка - "
+    "кадри готові, перемотка й експорт миттєві, нічого не перераховується; файл можна відкрити в InkReel будь-коли":
+        "Render all: process the whole video in advance and save it as an .ikr file (lossless). It opens in lock mode - the frames are "
+        "ready, seeking and export are instant, nothing is recomputed; the file can be opened in InkReel at any time",
+    "→ {w}×{h} · замок: розмір сталий\nоригінал {n}": "→ {w}×{h} · lock: fixed size\noriginal {n}",
+    "Знайти оригінал: {n}": "Find the original: {n}",
+    "Оригіналу «{n}» поряд немає, а файл .ikr зберігає лише готовий результат, без вихідного відео.\n\nЩоб повернутись до звичайного режиму й міняти налаштування, потрібен оригінал: кадри доведеться порахувати знову.\nВказати оригінал?": "The original \u201c{n}\u201d is not next to the file, and an .ikr file only keeps the finished result, not the source video.\n\nTo go back to the normal mode and change settings you need the original: the frames will have to be calculated again.\nLocate the original?",
+}

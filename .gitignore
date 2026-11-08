@@ -1,0 +1,28 @@
+# Environments and build output
+.venv/
+.venv_train/
+.venv_dml/
+dist/
+build/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# The site has its own repository
+WebSite/
+
+# Local working notes and hand-off files, not for the public repo
+CLAUDE.md
+.claude/
+docs/PROGRAM_STATUS.md
+docs/HANDOFF_ARCHIVE.md
+reports/
+
+# Training leftovers (the app ships the exported ONNX models)
+weights/*/last.pt
+weights/*/preview_*.png
+weights/student_backup/
+
+# Store signing material
+store/identity.json
+*.pfx
