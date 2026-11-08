@@ -131,6 +131,12 @@ def copy_static(dest: str, root: str = ROOT) -> list[str]:
     if os.path.isfile(notices):
         shutil.copyfile(notices, os.path.join(dest, "THIRD_PARTY_NOTICES.md"))
         out.append(os.path.join(dest, "THIRD_PARTY_NOTICES.md"))
+    # власна ліцензія InkReel (Apache-2.0) і NOTICE їдуть поруч: LICENSE.txt, NOTICE.txt
+    for src_name, dst_name in (("LICENSE", "LICENSE.txt"), ("NOTICE", "NOTICE.txt")):
+        own = os.path.join(root, src_name)
+        if os.path.isfile(own):
+            shutil.copyfile(own, os.path.join(dest, dst_name))
+            out.append(os.path.join(dest, dst_name))
     src = os.path.join(root, "licenses")
     if os.path.isdir(src):
         os.makedirs(os.path.join(dest, "licenses"), exist_ok=True)

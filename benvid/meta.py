@@ -5,9 +5,9 @@ from __future__ import annotations
 from . import __version__ as VERSION
 
 APP = "InkReel"
-AUTHOR = ""             # ім'я або нік автора
-SITE = ""               # сторінка проєкту (https://…)
-CONTACT = ""            # пошта чи нік для зв'язку
+AUTHOR = "Raimex"       # ім'я або нік автора
+SITE = "https://inkreel.raimex.space"   # сторінка проєкту (https://…)
+CONTACT = "raimex.crucible@gmail.com"   # пошта чи нік для зв'язку
 
 # «Пригости автора печивом»: посилання на сервіси донатів - [(назва, адреса)], напр. [("Ko-fi", "https://ko-fi.com/…"),
 # ("Monobank", "https://send.monobank.ua/jar/…")]. Одне посилання - кнопка відкриває його одразу, кілька - показує меню.
