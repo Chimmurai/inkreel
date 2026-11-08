@@ -27,3 +27,7 @@ weights/student_backup/
 # Store signing material
 store/identity.json
 *.pfx
+
+# Store listing sources and screenshots (regenerate with tools/make_listing_scenes.py; screenshots are taken from the built app)
+store/listing_assets/scenes/
+store/listing_assets/screenshots/

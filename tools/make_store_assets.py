@@ -158,10 +158,9 @@ def box_art(side: int = 1080) -> Image.Image:
 
 
 def listing_assets() -> dict[str, Image.Image]:
-    """картинки для завантаження в Partner Center (Store listings -> Store logos / Super hero art)"""
-    return {"StoreBoxArt_1080x1080.png": box_art(1080),
-            "StoreAppTile_300x300.png": plated(300),
-            "SuperHeroArt_1920x1080.png": hero(1920, 1080)}
+    """значок для Partner Center (Store listings -> Store logos). Велика афіша (SuperHeroArt, StoreBoxArt, StorePosterArt) з 2026-11-08
+    робиться окремо: tools/make_listing_art.py (кадри самої програми на плівці), тож цей скрипт їх не перезаписує"""
+    return {"StoreAppTile_300x300.png": plated(300)}
 
 
 def write(out_dir: str, files: dict[str, Image.Image]) -> list[str]:

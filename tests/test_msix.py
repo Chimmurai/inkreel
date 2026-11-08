@@ -230,10 +230,11 @@ def test_committed_assets_are_up_to_date_with_the_generator(assets):
 
 def test_listing_assets_follow_the_store_rules():
     listing = msa.listing_assets()
-    sizes = {n: im.size for n, im in listing.items()}
-    assert sizes == {"StoreBoxArt_1080x1080.png": (1080, 1080), "StoreAppTile_300x300.png": (300, 300), "SuperHeroArt_1920x1080.png": (1920, 1080)}
+    assert {n: im.size for n, im in listing.items()} == {"StoreAppTile_300x300.png": (300, 300)}
     folder = os.path.join(ROOT, "store", "listing_assets")
-    assert sorted(os.listdir(folder)) == sorted(listing)
+    # велика афіша лежить готовою (tools/make_listing_art.py), розміри за правилами Store
+    sizes = {"StoreBoxArt_1080x1080.png": (1080, 1080), "StoreAppTile_300x300.png": (300, 300), "SuperHeroArt_1920x1080.png": (1920, 1080),
+             "StorePosterArt_1440x2160.png": (1440, 2160)}
     for name, size in sizes.items():
         with Image.open(os.path.join(folder, name)) as saved:
             assert saved.size == size
