@@ -23,7 +23,6 @@ Watch it while you decide. The built-in player works ahead into a buffer (like t
 
 What you can do
 - Open almost anything: common video files, GIF and animated PNG/WebP, and photos including HEIC from iPhones, AVIF, TIFF and PSD.
-- View the same frame as a positive and a negative at once: the line between them is a smooth S-curve that follows your cursor. Defocus blurs black and white into shades, for viewing only.
 - Choose a size from 144p up to the size of the source, or type your own width and height.
 - Pick one of five quality levels, from a quick "Sketch" to "Engraving", a mode in which strokes follow the shapes in the picture (Sketch, Outline, Halftone, Drawing, Engraving).
 - Recolour the result with 20 two-colour palettes (ink and paper) and flip them with one click.
@@ -44,7 +43,6 @@ InkReel is free. Black and white with character.
 - No settings to fiddle with: the style is picked automatically for every frame.
 - Five quality levels, from a fast "Sketch" to engraving-style strokes in "Engraving".
 - Buffered player: pause, frame step, loop, full screen, mouse-wheel zoom in whole-pixel steps.
-- "Two polarities" view and a defocus slider, for viewing only.
 - Sizes from 144p to the source size, or your own width and height.
 - 20 two-colour palettes with a one-click invert.
 - Export to MP4, MKV, MOV, AVI, WebM, GIF, PNG sequence and JSON, with sound if you want it.

@@ -47,7 +47,6 @@ TIPS = {
         "Файл можна відкрити через Ctrl+O або перетягнути у вікно.",
         "«Кадр → фото» зберігає без втрат: PNG, BMP, TIFF або WebP.",
         "Той самий кадр дає те саме чорнило: дрібниці не «пливуть» від запуску до запуску.",
-        "У виді «Дві полярності» межа між позитивом і негативом іде за курсором.",
     ),
     i18n.EN: (
         "Black is not the absence of light. It is a decision.",
@@ -74,7 +73,6 @@ TIPS = {
         "Open a file with Ctrl+O or drag it into the window.",
         "“Frame → photo” saves losslessly: PNG, BMP, TIFF or WebP.",
         "The same frame gives the same ink: details do not drift from run to run.",
-        "In the “Two polarities” view the line between positive and negative follows the cursor.",
     ),
 }
 

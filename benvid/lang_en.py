@@ -63,13 +63,6 @@ EN: dict[str, str] = {
     "Попередня палітра": "Previous palette",
     "Наступна палітра": "Next palette",
     "Навпаки: туш і папір міняються місцями   [I]": "Reverse: ink and paper swap places   [I]",
-    "Вид": "View",
-    "Дві полярності": "Two polarities",
-    "Розфокус": "Defocus",
-    "Дві полярності: той самий кадр позитивом ліворуч і негативом праворуч, межа — плавна S-крива. Лише перегляд":
-        "Two polarities: the same frame as a positive on the left and a negative on the right, the line between them a smooth S-curve. View only",
-    "Положення межі. Над картинкою межа йде за курсором": "Position of the line. Over the picture the line follows the cursor",
-    "Розфокус: чорне й біле плавно розмиваються в півтони. Лише перегляд": "Defocus: black and white blur smoothly into shades. View only",
     "Експорт": "Export",
     "Висока": "High",
     "Середня": "Medium",

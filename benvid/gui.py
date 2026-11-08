@@ -1045,8 +1045,6 @@ class App(tk.Tk):
                             "cookie": eggs.Clicks(eggs.COOKIE_CLICKS, 1.6)}
         self._defocus, self._egg_t0, self._egg_job = 0.0, None, None        # розфокусування під філософію
         self._tip_n, self._empty_shown = -1, False                          # «Порада» (guide.TIPS): номер і чи вже показана на порожньому екрані
-        self._blur = 0.0                                                    # «Розфокус» у виді: 0..1, лише перегляд (скидається з новим файлом)
-        self._pol_on, self._pol_pos = False, 0.5                            # вид «Дві полярності»: увімкнено, положення межі 0..1
         self._spin_job, self._spin_frames, self._spin_key = None, None, None
         self._bub, self._bub_job, self._last_quote = None, None, -1
         self._party_job, self._party_orig, self._cookie_job = None, "", None
@@ -1223,7 +1221,6 @@ class App(tk.Tk):
         self.screen.bind("<B1-Motion>", self._screen_drag)
         self.screen.bind("<ButtonRelease-1>", self._screen_release)
         self.screen.bind("<Button-2>", lambda e: self._zoom_reset())   # середня кнопка - вписати
-        self.screen.bind("<Motion>", self._screen_motion, add="+")     # «Дві полярності»: межа за курсором
         self.screen.bind("<Configure>", lambda e: self._redraw())
         self.bind_all("<MouseWheel>", self._on_wheel)                  # колесо: одне на все вікно (див. _on_wheel)
         self.bind_all("<Button-4>", self._on_wheel)                    # X11 (колесо як кнопки 4/5)
@@ -1458,24 +1455,6 @@ class App(tk.Tk):
         self._tip(self.btn_pnext, "Наступна палітра")
         self._tip(self.btn_pinv, "Навпаки: туш і папір міняються місцями   [I]")
         self._draw_swatch()
-
-        s = self._section(side, "Вид")                               # лише перегляд: експорт від цього не змінюється
-        vrow = tk.Frame(s, bg=BG)
-        vrow.pack(fill="x")
-        self.btn_pol = self._L(PixButton(vrow, "", command=self._toggle_pol, width=150, height=H_M, toggle=True), "Дві полярності")
-        self.btn_pol.pack(side="left")
-        self.pol_sl = PixSlider(vrow, 0, 100, command=self._on_pol_slider, height=26)
-        self.pol_sl.set(self._pol_pos * 100)
-        self.pol_sl.pack(side="left", fill="x", expand=True, padx=(M, 0))
-        brow = tk.Frame(s, bg=BG)
-        brow.pack(fill="x", pady=(G, 0))
-        self.blur_lbl = self._L(tk.Label(brow, bg=BG, fg=FG, font=FONT, anchor="w", width=10), "Розфокус")
-        self.blur_lbl.pack(side="left")
-        self.blur_sl = PixSlider(brow, 0, 100, command=self._on_blur, height=26)
-        self.blur_sl.pack(side="left", fill="x", expand=True, padx=(M, 0))
-        self._tip(self.btn_pol, "Дві полярності: той самий кадр позитивом ліворуч і негативом праворуч, межа — плавна S-крива. Лише перегляд")
-        self._tip(self.pol_sl, "Положення межі. Над картинкою межа йде за курсором")
-        self._tip(self.blur_sl, "Розфокус: чорне й біле плавно розмиваються в півтони. Лише перегляд")
 
         s = self._section(side, "Експорт", last=True)
         row = tk.Frame(s, bg=BG)
@@ -2559,7 +2538,6 @@ class App(tk.Tk):
         self._show_app()
         self._last_mask = self._last_bgr = None
         self._zoom, self._vc = None, view.CENTER           # новий файл - знову «вписати»
-        self._reset_blur()                                 # «Розфокус» — на мить, а не назавжди
         self._lock_p = None
         self._apply_kind(info["kind"])
         self._title_name = os.path.basename(path)
@@ -3314,42 +3292,9 @@ class App(tk.Tk):
         mask = self._last_mask
         if mask is None:
             return None
-        de, sp = self._view_args()                        # пасхалка й «Розфокус»: 0/1-маска стає плавними відтінками; «Дві полярності»
-        return view.compose_view(mask, self._lut(), cw, ch, self._zoom, self._vc, de, sp)
-
-    def _view_args(self):
-        """-> (розфокус 0..1, положення межі «Двох полярностей» або None): усе, що вид робить з маскою перед масштабуванням"""
-        return max(self._defocus, self._blur), (self._pol_pos if self._pol_on else None)
-
-    def _toggle_pol(self):
-        self._pol_on = self.btn_pol.on
-        self._redraw()
-
-    def _on_pol_slider(self, v):
-        self._pol_pos = min(1.0, max(0.0, v / 100.0))
-        self._frame_redraw()
-
-    def _on_blur(self, v):
-        self._blur = min(1.0, max(0.0, v / 100.0))
-        self._frame_redraw()
-
-    def _reset_blur(self):
-        self._blur = 0.0
-        if hasattr(self, "blur_sl"):
-            self.blur_sl.set(0)
-
-    def _screen_motion(self, e):
-        """«Дві полярності»: межа йде за курсором над картинкою"""
-        mask = self._last_mask
-        if not self._pol_on or mask is None or self._drag is not None:
-            return
-        h, w = mask.shape[:2]
-        f = view.pointer_fraction(self.screen.winfo_width(), self.screen.winfo_height(), w, h, self._zoom, self._vc, e.x)
-        if abs(f - self._pol_pos) < 1e-3:
-            return
-        self._pol_pos = f
-        self.pol_sl.set(f * 100)
-        self._frame_redraw()
+        if self._defocus > 0.004:                         # пасхалка: 0/1-маска стає плавними відтінками
+            mask = eggs.defocus(mask, self._defocus)
+        return view.compose(mask, self._lut(), cw, ch, self._zoom, self._vc)
 
     def _frame_redraw(self):
         """новий кадр відтворення: найважче в показі - зменшення кадра до вікна (view.compose, ≈10 мс на 1440p, OpenCV віддає GIL) - іде у фоновому потоці, поки інтерфейс
@@ -3363,12 +3308,11 @@ class App(tk.Tk):
             self._cpend = True                        # попередній ще рахується: коли скінчить, візьмемо найновіший кадр
             return
         mask, lut, zoom, vc = self._last_mask, self._lut(), self._zoom, self._vc
-        de, sp = self._view_args()
         self._cinfo = (self._pgen, cw, ch, time.perf_counter())
         if self._cx is None:
             from concurrent.futures import ThreadPoolExecutor
             self._cx = ThreadPoolExecutor(1, thread_name_prefix="benvid-compose")
-        self._cfut = self._cx.submit(view.compose_view, mask, lut, cw, ch, zoom, vc, de, sp)
+        self._cfut = self._cx.submit(view.compose, mask, lut, cw, ch, zoom, vc)
 
     def _poll_compose(self):
         """забрати готовий зі фонового потоку кадр і намалювати; True, якщо щось намалювали"""

@@ -12,7 +12,7 @@ InkReel is a free Windows 10/11 (64-bit) app that turns video, photos and GIFs i
 - **Five levels, from a quick sketch to a detailed engraving:** Sketch, Outline, Halftone, Drawing, Engraving. Each area of the frame gets its own hand, and clean flat surfaces stay clean.
 - **IRNM1:** our own neural network, a separate branch beside the algorithm, several times faster. It runs through ONNX Runtime (DirectML on a graphics card, otherwise CPU) and falls back to Engraving if it cannot run.
 - **Symbols mode:** a picture made of real glyphs of a monospaced font, chosen by tone. All five levels work here too.
-- **Views:** two polarities (positive and negative of one frame divided by an S-curve), defocus, and zoom in whole steps up to 6400%.
+- **Viewing:** zoom in whole-pixel steps up to 6400%, so every pixel stays a crisp square.
 - **Render all (`.ikr`):** compute once, then play, zoom and export without recomputing.
 - **Export:** MP4 with sound, GIF and more, a frame-rate cap, 20 palettes. The same frame always gives the same result.
 - **Interface:** Ukrainian and English; the installer language becomes the app language.

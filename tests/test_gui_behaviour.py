@@ -664,61 +664,7 @@ def test_size_fields_keep_theme_colours_when_disabled(app):
     app.ent_w.config(state="normal")
 
 
-# ---------------------------------------------------------------- пакет П-1: «Дві полярності», «Розфокус», «Порада»
-def test_two_polarities_and_defocus_are_view_only(app, tmp_path):
-    p = str(tmp_path / "pol.png")
-    _photo(p)
-    _open_and_wait(app, p)
-    mask0 = app._last_mask.copy()
-    plain = app._compose(400, 300)
-    app.btn_pol.on = True
-    app._toggle_pol()
-    assert app._pol_on and app._view_args()[1] == app._pol_pos
-    two = app._compose(400, 300)
-    assert not np.array_equal(plain[0], two[0]), "праворуч від межі кадр інвертований"
-    app._on_blur(100)
-    assert app._blur == 1.0 and app._view_args()[0] == 1.0
-    assert not np.array_equal(app._compose(400, 300)[0], two[0])
-    assert np.array_equal(app._last_mask, mask0), "маска (з якої йде експорт) не змінилась"
-    app.btn_pol.on = False
-    app._toggle_pol()
-    assert app._view_args()[1] is None
-
-
-def test_polarity_line_follows_the_cursor(app, tmp_path):
-    class E:
-        pass
-    p = str(tmp_path / "pol2.png")
-    _photo(p)
-    _open_and_wait(app, p)
-    app.btn_pol.on = True
-    app._toggle_pol()
-    settle(app, rounds=2)
-    e = E()
-    e.x, e.y = app.screen.winfo_width() - 2, 10
-    app._screen_motion(e)
-    assert app._pol_pos > 0.8 and abs(app.pol_sl.get() - app._pol_pos * 100) < 1e-6
-    e.x = 2
-    app._screen_motion(e)
-    assert app._pol_pos < 0.2
-
-
-def test_defocus_resets_on_new_file_and_easter_egg_stays(app, tmp_path):
-    p = str(tmp_path / "pol3.png")
-    _photo(p)
-    _open_and_wait(app, p)
-    app._on_blur(60)
-    app.blur_sl.set(60)
-    assert app._blur > 0.5
-    _open_and_wait(app, p)
-    assert app._blur == 0.0 and app.blur_sl.get() == 0
-    app._defocus = 0.7                                  # пасхалка живе окремо й додається до виду
-    assert app._view_args()[0] == 0.7
-    app._on_blur(90)
-    assert app._view_args()[0] == pytest.approx(0.9)
-    app._defocus = 0.0
-
-
+# ---------------------------------------------------------------- пакет П-1: «Порада»
 def test_tip_on_empty_screen_and_footer_hidden_while_exporting(app):
     from benvid import guide
     settle(app, rounds=2)

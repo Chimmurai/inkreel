@@ -60,7 +60,7 @@ def test_side_panel_matches_screen(lang_app):
     if a.sstack.overflow:
         pytest.skip("екран замалий: панель прокручується")
     secs = [box(w) for w in a.side_in.winfo_children() if isinstance(w, tk.Frame)]
-    assert len(secs) == 5                          # «Якість», «Розмір результату», «Палітра», «Вид», «Експорт»
+    assert len(secs) == 4                          # «Якість», «Розмір результату», «Палітра», «Експорт»
     for x, y in zip(secs, secs[1:]):
         assert y[1] - x[3] == M
     assert all(b[0] == side[0] and b[2] == side[2] for b in secs)
