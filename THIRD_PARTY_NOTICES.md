@@ -21,7 +21,7 @@ Versions below are those current when this file was written (October 2026); the 
 | ONNX Runtime (`onnxruntime-directml` on Windows, `onnxruntime` elsewhere) | runs the trained IRNM1 (InkreelNeuralModel v1) network (quality level 6) on the graphics card or the processor | MIT; the DirectML build also contains Microsoft's DirectML library, a redistributable component of the DirectML package | https://onnxruntime.ai/ |
 | Pillow 13 | image files | MIT-CMU (HPND); the wheel bundles brotli, FreeType (FTL), HarfBuzz, Little CMS, libavif, libjpeg-turbo, libpng, libwebp, OpenJPEG, libtiff, xz and zlib-ng under their own permissive licences (all in its `LICENSE`) | https://python-pillow.org/ |
 | pillow-heif 1.8 | HEIC/HEIF photos | BSD-3-Clause for the Python code; the Windows wheel bundles **libheif (LGPL-3.0), libde265 (LGPL-3.0), x265 (GPL-2.0)** and the MinGW-w64 runtime (GPL-3.0 with GCC runtime exception; libwinpthread MIT/BSD). Its authors label the binary wheel as GPLv2 as a whole | https://github.com/bigcat88/pillow_heif |
-| imageio-ffmpeg 0.6 | finds and starts `ffmpeg.exe` | BSD-2-Clause for the wrapper; the bundled **`ffmpeg.exe` is FFmpeg 7.1 built as GPL-3.0-or-later** (see below) | https://github.com/imageio/imageio-ffmpeg |
+| imageio-ffmpeg 0.7 | finds and starts `ffmpeg.exe` | BSD-2-Clause for the wrapper; the bundled **`ffmpeg.exe` is FFmpeg 7.1 built as GPL-3.0-or-later** (see below) | https://github.com/imageio/imageio-ffmpeg |
 | sounddevice 0.5 and PortAudio | sound in the player | MIT; PortAudio is MIT-style | https://python-sounddevice.readthedocs.io/ |
 | windnd 1.0 | drag-and-drop of files into the window | MIT | https://pypi.org/project/windnd/ |
 | cffi, pycparser | needed by sounddevice | MIT-0, BSD-3-Clause | https://cffi.readthedocs.io/ |
@@ -35,9 +35,8 @@ DejaVu Sans Mono (above) is used instead.
 
 ## FFmpeg (GPL-3.0-or-later)
 
-`ffmpeg.exe` is a separate program that InkReel starts to encode video; it is not linked into InkReel's code. The build that comes with `imageio-ffmpeg 0.6.0`
-is **FFmpeg 7.1 (libavcodec 61.19) configured with `--enable-gpl --enable-version3`** and contains, among others, x264, x265, Xvid, libvpx, libaom, libopus,
-libvorbis, libmp3lame, libwebp and libass. Because of the GPL parts the whole `ffmpeg.exe` is licensed under the **GNU GPL, version 3 or later**
+`ffmpeg.exe` is a separate program that InkReel starts to encode video; it is not linked into InkReel's code. The build that comes with `imageio-ffmpeg 0.7.0` is the **“essentials” build of FFmpeg 7.1 published by gyan.dev** (https://www.gyan.dev/ffmpeg/builds/; libavcodec 61.19, built with GCC 14.2),
+configured with `--enable-gpl --enable-version3`. It contains, among others, x264, x265, Xvid, libvpx, libaom, libopus, libvorbis, libmp3lame, libwebp, libass, GnuTLS and libsrt. Because of the GPL parts the whole `ffmpeg.exe` is licensed under the **GNU GPL, version 3 or later**
 (`licenses\GPL-3.0.txt`). InkReel does not modify FFmpeg or any of the libraries in it.
 
 Source code of the FFmpeg version shipped with InkReel:
@@ -46,7 +45,7 @@ The libraries built into it are open source and are published by their own proje
 x264 — https://code.videolan.org/videolan/x264, x265 — https://bitbucket.org/multicoreware/x265_git,
 libvpx — https://chromium.googlesource.com/webm/libvpx, libaom — https://aomedia.googlesource.com/aom/.
 The full configuration of the build is printed by `ffmpeg.exe -version`. If you cannot get any of this source code,
-ask the author (see the *About* section of InkReel) and you will be given it.
+ask the author (see the *About* section of InkReel) and you will be given it. This offer is valid for at least three years from the release date of each InkReel version, to anyone who has the program.
 
 ## libheif, libde265, x265 (inside pillow-heif)
 

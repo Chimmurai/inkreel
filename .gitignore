@@ -16,6 +16,7 @@ CLAUDE.md
 .claude/
 docs/PROGRAM_STATUS.md
 docs/HANDOFF_ARCHIVE.md
+docs/COMPLIANCE.md
 reports/
 
 # Training leftovers (the app ships the exported ONNX models)
