@@ -50,4 +50,8 @@ scripts\build_msix.bat   Microsoft Store package
 | `CHANGELOG.md` | release notes |
 | `THIRD_PARTY_NOTICES.md`, `licenses/` | licenses of bundled components |
 
+## License
+
+InkReel's own code and model weights are released under the [Apache License 2.0](LICENSE). Bundled third-party components, including FFmpeg (GPL), keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 Made by Raimex.
