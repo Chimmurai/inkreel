@@ -62,6 +62,12 @@ class PlayerMixin:
         self.row_lay.invalidate()
 
     # ------------------------------------------------------------------ транспорт
+    def _play_icon(self) -> str:
+        """значок кнопки: під час рендеру - «пауза» (іде) або «грати» (стоїть), інакше - за станом плеєра"""
+        if self.export.running:
+            return "play" if self.export.pause_ev.is_set() else "pause"
+        return "pause" if self.player.state == "playing" else "play"
+
     def _toggle_loop(self):
         self.player.loop = self.btn_loop.on
 

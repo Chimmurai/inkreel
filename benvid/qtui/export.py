@@ -71,7 +71,7 @@ class ExportController(QObject):
                     r = export_gif_source(path, out, params, fmt, size_key, workers, prog, self.cancel, palette=pal_name)
                 else:
                     r = export_still(path, out, params, size_key, prog, palette=pal_name)
-                self._end("Готово: {frames} · {w}×{h} · {mb:.1f} МБ\n{p}", 1.0, True, frames=r["frames"], w=r["size"][0], h=r["size"][1], mb=r["bytes"] / 1e6, p=out)
+                self._end("Готово: {frames} · {w}×{h} · {mb:.1f} МБ\n{p}\nклік — відкрити теку", 1.0, True, frames=r["frames"], w=r["size"][0], h=r["size"][1], mb=r["bytes"] / 1e6, p=out)
             except Cancelled:
                 self._end("Скасовано", 0.0, False)
             except Exception as e:  # noqa: BLE001

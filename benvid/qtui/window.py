@@ -26,6 +26,7 @@ from .boxes import PixCombo, PixEntry, SectionBox
 from .consts import (AUTO, BAR_H, EDGE_W, FONT, FONT_B, FONT_S, G, GG, H_L, H_M, H_S, HEAD_W, M, MIN_MAIN, SB_W, SIDE_W, TOG_W, W_SQ)
 from .eggs_ui import EggsMixin
 from .export import ExportController
+from .filectl import FileMixin
 from .footer import FooterMixin
 from .labels import TkImage, TkLabel, TkStrip
 from .pix import PixButton, PixProgress, PixScroll, PixSlider, QualityBar
@@ -59,7 +60,7 @@ def _fixed(b: PixButton, w: int) -> PixButton:
     return b
 
 
-class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
+class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMainWindow):
     TITLE = "InkReel"
     SEEK_GAP = 0.04
     auto_done = Signal(int, str)                 # результат підбору розміру «Авто» з фонового потоку (токен, ключ розміру)
@@ -100,6 +101,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
             sz = AUTO                                   # застарілий пресет (напр. 2K) з файлу налаштувань; власні ключі «AxB», «Ax», «xB» лишаються
         self.size_key = sz
         self._auto_size, self._auto_tok, self._branch_back = None, 0, False
+        self._last_dir, self._out_dir, self._lock_p = None, None, None
         try:
             self.fps_sel = max(0.0, float(ui.get("fps", 0) or 0))   # ліміт к/с, який хоче користувач (0 - як в оригіналі); діє, коли він нижчий за fps відео
         except (TypeError, ValueError):
@@ -264,7 +266,8 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
         bl.addWidget(row)
         main.addWidget(bot)
         self._build_footer()
-        self._last_out, self._prog_done = "", False
+        self._last_out, self._prog_done, self._freeze_out = "", False, None
+        self.prog_lbl.clicked = self._open_out                      # клік по підсумку експорту відкриває теку з результатом
         self._init_eggs()
         self._install_tips()
 
@@ -446,32 +449,29 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
     def _tr(self):
         L = i18n.lang()
         self.btn_open.set_text(tr("Відкрити"))
-        self.btn_export.set_text(tr({"video": "Зберегти…", "gif": "Зберегти GIF", "image": "Зберегти фото"}[self.kind]))
         self.btn_stop.set_text(tr("Стоп"))
-        self.btn_export2.set_text(tr({"video": "Зберегти…", "gif": "Зберегти GIF", "image": "Зберегти фото"}[self.kind]))
         self.btn_ink.set_text(tr("Чорнило"))
         self.btn_sym.set_text(tr("Символи"))
-        self.btn_ink.set_on(not self.params.glyph)
-        self.btn_sym.set_on(self.params.glyph)
+        self.btn_ink.set_on(not self._vp().glyph)
+        self.btn_sym.set_on(bool(self._vp().glyph))
         self.btn_ua.set_on(L == i18n.UK)
         self.btn_en.set_on(L == i18n.EN)
-        self.sec_q.title.config(text=(tr("Якість") + "  ·  " + tr(METHODS[self.params.method]) + (f"  {self.params.method}/5" if self.params.method <= MAIN_LEVELS else "")).upper())
+        self._show_method(self.params.method)
         self.sec_size.title.config(text=tr("Розмір результату").upper())
         self.sec_pal.title.config(text=tr("Палітра").upper())
         self.sec_exp.title.config(text=tr("Експорт").upper())
-        self.m_info.config(text=tr(METHOD_INFO[self.params.method]))
-        self.m_slider.set(self.params.method)
+        self.m_slider.set(self._vp().method)
         self.m_slider.draw()
         self.m_slider.update()
         self.lbl_custom.config(text=tr("свій:"))
-        self.btn_lock.set_text(tr("Порахувати все"))
+        self._export_labels()
         self.btn_aud.set_text(tr("Звук"))
         self.btn_rng.set_text(tr("Весь"))
         self.btn_loop.set_text(tr("Цикл"))
         self.btn_photo.set_text(tr("Кадр → фото"))
         for k, b in self.size_btns.items():
             b.set_text(tr("Авто") if k == AUTO else (tr("Джерело") if k == "Як у джерела" else k.replace("x", "×")))
-            b.set_on(k == self.size_key)
+            b.set_on(False if self.locked else k == self.size_key)
         self._fill_formats(keep=True)
         self._sync_fps()
         self._show_dens()
@@ -540,6 +540,9 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
 
     # ------------------------------------------------------------------------------ керування
     def _set_level(self, n: int):
+        if self._lock_guard():
+            self.m_slider.set(self._vp().method)
+            return
         self._branch_back = False
         if n == self.params.method:
             return
@@ -552,6 +555,8 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
         self._save()
 
     def _set_glyph(self, v: bool):
+        if self._lock_guard():
+            return
         v = bool(v)
         if v == self.params.glyph:
             return
@@ -590,41 +595,11 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
         self.last_palette_ms = (time.perf_counter() - t0) * 1000
         self._save_later()
 
-    def _open(self, path: str | None = None):
-        if not path:
-            exts = tuple(VIDEO_EXT) + tuple(IMAGE_EXT) + tuple(GIF_EXT)
-            path, _ = QFileDialog.getOpenFileName(self, tr("Відкрити відео, GIF або фото"), self.ui.get("dir", ""),
-                                                  tr("Усі медіа") + " (" + " ".join("*" + e for e in exts) + ");;" + tr("Усі файли") + " (*.*)")
-        if not path:
-            return
-        try:
-            info = self.player.open(path, "240p" if self.size_key == AUTO else self.size_key)
-        except Exception as e:  # noqa: BLE001
-            QMessageBox.critical(self, "InkReel", tr("Не вдалося відкрити файл:\n{e}\n\nДеталі: {p}", e=e, p=""))
-            return
-        self._show_app()
-        self.ready = True
-        self.path = path
-        self._name = os.path.basename(path)
-        self.player.set_params(self.params)
-        self.surface.reset_view()
-        self.surface.set_mask(None)
-        self._apply_kind(info["kind"])
-        self.seek.lo, self.seek.hi = 0, max(1, info["frames"] - 1)
-        self.seek.ranges = []
-        self.seek.set(0)
-        self._reset_range()
-        self.btn_play.set_icon("play")
-        if self.player.baked:
-            self._auto_tok += 1                           # запізнілий автовибір попереднього файлу не повинен чіпати цей
-        elif self.size_key == AUTO:
-            self._auto_resolve()
-        self._tr()                                        # (тут же підпис розміру й кадри на секунду під новий файл)
-
     def _toggle(self):
         if self.export.running:
-            if self.kind == "video":
+            if self.kind == "video":                     # під час рендеру ця ж кнопка ставить на паузу сам рендер: нових шматків пул не бере
                 self.export.toggle_pause()
+                self.btn_play.set_icon(self._play_icon())
                 self._on_progress(self.export.f, self.export.label, self.export.clock.elapsed() if self.export.clock else 0.0, None)
             return
         if self.ready:
@@ -643,11 +618,17 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
             self.player.seek(int(v))
 
     # ------------------------------------------------------------------------------ експорт
-    def _export(self):
+    def _export(self, freeze=False):
         if not self.ready or self.export.running:
             return
         from ..video import FORMATS as VF
+        from ..video import IKR_FORMAT
         kind, fmt = self.kind, self.fmt_cb.currentData()
+        if freeze:                                              # «Порахувати все»: завжди .ikr, потім файл відкривається в режимі замка
+            if kind != "video":
+                return
+            fmt = IKR_FORMAT
+        self._freeze_out = None
         base = os.path.splitext(os.path.basename(self.path))[0] + "_bw"
         rng = self._range() if kind == "video" else None
         if rng:
@@ -664,7 +645,8 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
             out = QFileDialog.getExistingDirectory(self, tr("Тека для PNG-кадрів"), src_dir)
             out = os.path.join(out, base) if out else ""
         else:
-            out, _ = QFileDialog.getSaveFileName(self, tr("Зберегти як"), os.path.join(src_dir, base + ext), tr(fmt) + " (*" + ext + ")")
+            out, _ = QFileDialog.getSaveFileName(self, tr("Порахувати все й зберегти як") if freeze else tr("Зберегти як"), os.path.join(self._src_dir() or src_dir, base + ext),
+                                                 tr(fmt) + " (*" + ext + ")")
         if not out:
             return
         if os.path.normcase(os.path.abspath(out)) == os.path.normcase(os.path.abspath(self.path)):
@@ -684,22 +666,21 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
         for b in (self.btn_export, self.btn_export2, self.btn_open):
             b.set_enabled(False)
         self.btn_stop.set_enabled(True)
-        self._prog_done = False
+        self.btn_play.set_enabled(kind == "video")               # під час рендеру ця ж кнопка ставить на паузу сам рендер (відео); GIF і фото рахуються за мить
+        self.btn_play.set_icon("pause")
         self._say("Обробка…")
+        self._freeze_out = out if freeze else None
         self.export.start(kind=kind, path=self.path, out=out, params=self.params, fmt=fmt, size_key=size_key, quality=self.q_cb.currentData() or "Висока",
                           pal_name=self._pal_key(), audio=self.btn_aud.on, cache=cache, src_fps=pl.fps or 24.0, n_frames=pl.n, a0=a0, b0=b0,
                           fps=self._fps_limit() if kind == "video" else None)
         self._last_out = out
-
-    def _say(self, key: str = "", **kw):
-        self._exp_msg = (key, kw)
-        self.prog_lbl.config(text=tr(key, **kw) if key else "")
 
     def _on_progress(self, f, label, el, eta):
         if not self.export.running:
             return
         self.export.f, self.export.label = f, label
         self.prog.set(f)
+        self._exp_msg = ("", {})
         self.prog_lbl.config(text=self.export.status(f, label, el, eta, tr))
 
     def _on_live(self, mask):
@@ -716,13 +697,21 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
         self.prog.set(f)
         if "frames" in kw:
             kw["frames"] = tn(kw["frames"], "{n} кадр|{n} кадри|{n} кадрів")
-        self._say(key, **kw)
+        if "p" in kw and ok:
+            kw["p"] = self._short_path(kw["p"])
+        self.btn_play.set_enabled(True)
+        self.btn_play.set_icon("play")
+        self._say(key, done=bool(ok), **kw)
         for b in (self.btn_export, self.btn_export2, self.btn_open):
             b.set_enabled(True)
         self.btn_stop.set_enabled(False)
-        self._prog_done = bool(ok)
         if ok:
             self._spin_reel()                            # готово: котушка робить оберт
+            out, self._freeze_out = self._freeze_out, None
+            if out:
+                self._enter_lock(out)                    # «Порахувати все» закінчено: відкрити .ikr у режимі замка
+        else:
+            self._freeze_out = None
 
     # ------------------------------------------------------------------------------ такт
     def _tick(self):
@@ -746,7 +735,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
                 self.time_lbl.config(text=tr("ФОТО {w}×{h}", w=pl.info["width"], h=pl.info["height"]))
             else:
                 self.time_lbl.config(text=f"{fmt_t(pl.time_of(pos))} / {fmt_t(pl.duration)}")
-            self.btn_play.set_icon("pause" if pl.state == "playing" else "play")
+            self.btn_play.set_icon(self._play_icon())
             rs = []
             k = max(1.0, (pl.n - 1) / max(1, self.seek.width() - 16))
             for a, b in pl.buffered_ranges():

@@ -26,7 +26,7 @@ class SizeMixin:
         return self.size_key
 
     def _locked(self) -> bool:
-        return bool(getattr(self, "locked", False))
+        return bool(self.locked)
 
     def _update_size_label(self):
         info = self.player.info
@@ -52,7 +52,7 @@ class SizeMixin:
 
     def _show_dens(self):
         """підпис над повзунком щільності: скільки знаків і яка клітинка при поточному розмірі результату"""
-        d = glyph.dens_of(self.params.gdens)
+        d = glyph.dens_of(self._vp().gdens)
         info = self.player.info if self.ready else None
         txt = tr("Щільність знаків") + f"  {d}/{glyph.DENS_N}"             # два короткі рядки: довгий в одному не вміщається в панель
         if info:
@@ -63,6 +63,8 @@ class SizeMixin:
         self.dens_lbl.config(text=txt)
 
     def _set_size(self, key: str):
+        if self._lock_guard():
+            return
         self.size_key = key
         for k, b in self.size_btns.items():
             b.set_on(k == key)
@@ -129,6 +131,9 @@ class SizeMixin:
         return all(v is None or 2 <= v <= 4096 for v in (w, h))
 
     def _apply_custom(self):
+        if self._lock_guard():
+            return
+
         def num(s):
             s = s.strip()
             return int(s) if s.isdigit() else None
@@ -153,6 +158,8 @@ class SizeMixin:
 
     # ------------------------------------------------------------------ щільність, рівень, чорнило/символи: те, що тягне за собою розмір
     def _apply_gdens(self, n: int):
+        if self._lock_guard():
+            return
         n = min(3, max(1, int(n)))
         self.dens_bar.set(n)
         if n != self.params.gdens:

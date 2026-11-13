@@ -695,6 +695,77 @@ def test_format_quality_audio_fps_and_size_are_saved(qapp, vwin):
     w.kind = "video"
 
 
+def test_bake_all_enters_the_lock_and_normal_mode_returns_to_the_original(qapp, vwin, tmp_path, monkeypatch):
+    from benvid.qtui import window as W
+    w = vwin
+    orig = w.path
+    out = tmp_path / "clip_bw.ikr"
+    monkeypatch.setattr(W.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(out), "")))
+    w._set_level(3)
+    w._set_size("360p")
+    w._export(freeze=True)
+    assert w.export.running and w._freeze_out == str(out)
+    assert spin(qapp, lambda: not w.export.running and w.locked, timeout=180), w.prog_lbl.text_
+    assert out.exists() and w.path == str(out) and w.btn_lock.text == "Звичайний режим"
+    assert not w.m_slider.enabled and not w.btn_ink.enabled and not w.btn_ok.enabled and not w.ent_w.isEnabled()
+    assert not any(b.on for b in w.size_btns.values()) and "ЗАМОК" in w.sec_q.title.text_ and w.m_slider.v == 3
+    assert "пораховане" in w.prog_lbl.text_
+    for act in (lambda: w._set_size("720p"), lambda: w._set_level(5), lambda: w._set_glyph(True), lambda: w._apply_custom(), lambda: w._apply_gdens(1)):
+        act()
+        assert "Режим замка" in w.prog_lbl.text_ and w.params.method == 3 and not w.params.glyph and w.size_key == "360p"
+        w._say()
+    assert w.btn_lock.text == "Звичайний режим" and w.fmt_cb.isVisibleTo(w)
+    w._lock_toggle()                                     # «Звичайний режим»
+    assert spin(qapp, lambda: not w.locked and w.path == orig, timeout=60), w.prog_lbl.text_
+    assert w.m_slider.enabled and w.btn_ink.enabled and w.btn_lock.text == "Порахувати все" and w.params.method == 3 and w.size_key == "360p"
+    assert "Звичайний режим: оригінал відкрито" in w.prog_lbl.text_ and "ЗАМОК" not in w.sec_q.title.text_
+
+
+def test_normal_mode_asks_for_the_original_when_it_is_gone_and_cancel_keeps_the_lock(qapp, vwin, tmp_path, monkeypatch):
+    from benvid.qtui import filectl, window as W
+    w = vwin
+    out = tmp_path / "gone.ikr"
+    monkeypatch.setattr(W.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(out), "")))
+    w._export(freeze=True)
+    assert spin(qapp, lambda: not w.export.running and w.locked, timeout=180)
+    w.player.baked_meta.setdefault("src", {})["path"] = str(tmp_path / "нема.mp4")
+    asked = []
+    monkeypatch.setattr(filectl.QMessageBox, "question", staticmethod(lambda *a, **k: (asked.append(a[2]), filectl.QMessageBox.Cancel)[1]))
+    w._lock_toggle()
+    assert asked and "Оригіналу" in asked[0] and w.locked, "без оригіналу питаємо, скасування лишає замок"
+
+
+def test_open_reports_a_file_note_and_remembers_the_folder_and_clicking_the_result_opens_it(qapp, win, tmp_path, monkeypatch):
+    from benvid.qtui import filectl
+    from PIL import Image
+    p = tmp_path / "ф.png"
+    Image.fromarray((np.random.RandomState(2).rand(40, 60) * 255).astype(np.uint8)).save(p)
+    assert win._last_dir is None
+    win._open(str(p))
+    assert win._last_dir == str(tmp_path) and win._src_dir() == str(tmp_path)
+    opened = []
+    monkeypatch.setattr(filectl.os, "startfile", lambda d: opened.append(d), raising=False)
+    win._last_out = str(tmp_path / "res.png")
+    win._say("Готово", done=True)
+    win.prog_lbl.clicked()
+    assert opened == [str(tmp_path)] and win._out_dir == str(tmp_path)
+    win._say("Помилка", done=False)
+    opened.clear()
+    win.prog_lbl.clicked()
+    assert opened == [], "клік працює лише по підсумку успішного експорту"
+    assert win._short_path(str(tmp_path / "a" / "b" / "дуже-довга-назва-файлу-для-перевірки-скорочення.mp4"), 20).startswith("…")
+
+
+def test_failed_open_shows_the_error_and_leaves_the_window_unchanged(qapp, win, tmp_path, monkeypatch):
+    from benvid.qtui import filectl
+    bad = tmp_path / "x.mp4"
+    bad.write_bytes(b"not a video")
+    shown = []
+    monkeypatch.setattr(filectl.QMessageBox, "critical", staticmethod(lambda *a, **k: shown.append(a[2])))
+    win._open(str(bad))
+    assert shown and not win.ready
+
+
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     seeks = []
     monkeypatch.setattr(win.player, "seek", lambda f: seeks.append(int(f)))
