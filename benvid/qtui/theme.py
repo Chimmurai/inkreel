@@ -20,6 +20,25 @@ def font(px: int = NORMAL, bold: bool = False) -> QFont:
     return f
 
 
+_FONT_CACHE: dict = {}
+
+
+def tk_font(spec) -> QFont:
+    """шрифт у записі Tk: ("Consolas", 10, "bold") -> QFont із тим самим пікселем-розміром (пункти Tk при 96 DPI: px = pt·96/72)"""
+    key = tuple(spec) if isinstance(spec, (tuple, list)) else ("Consolas", 10)
+    f = _FONT_CACHE.get(key)
+    if f is None:
+        fam, pt, style = key[0], key[1], key[2:]
+        f = QFont(fam)
+        f.setStyleHint(QFont.Monospace)
+        f.setPixelSize(max(1, round(float(pt) * 96 / 72)))
+        f.setBold("bold" in style)
+        f.setHintingPreference(QFont.PreferFullHinting)
+        f.setStyleStrategy(QFont.PreferDefault)
+        _FONT_CACHE[key] = f
+    return f
+
+
 class Theme(QObject):
     changed = Signal()
 
