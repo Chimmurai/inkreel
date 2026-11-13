@@ -220,7 +220,9 @@ def about_text() -> str:
              tr("Тут сховано кілька дрібниць — клікай не лише по кнопках."), ""]
     if meta.AUTHOR:
         lines.append(tr("Автор: {a}", a=meta.AUTHOR))
-    if meta.SITE:
+    if meta.SITE and meta.REPO and meta.STORE:
+        lines.append(tr("Офіційно: {s} · {g} · Microsoft Store", s=meta.short(meta.SITE), g=meta.short(meta.REPO)))
+    elif meta.SITE:
         lines.append(tr("Сайт: {s}", s=meta.SITE))
     if meta.CONTACT:
         lines.append(tr("Зв'язок: {c}", c=meta.CONTACT))

@@ -5,7 +5,10 @@
 InkReel is a free Windows 10/11 (64-bit) app that turns video, photos and GIFs into pure black and white: every pixel is either ink or paper, with dots, strokes and grain chosen by what is in the frame.
 
 **Website:** https://inkreel.raimex.space  
+**Microsoft Store:** https://apps.microsoft.com/detail/9NW62SPG91ZR  
 **Download:** [latest release](https://github.com/Chimmurai/inkreel/releases/latest) (`InkReel-Setup.exe`)
+
+> **Official sources.** InkReel is made by Raimex and is published in exactly three places: this repository, the [Microsoft Store](https://apps.microsoft.com/detail/9NW62SPG91ZR) and the [website](https://inkreel.raimex.space). The release page lists the SHA-256 of every installer. Copies from anywhere else are not ours.
 
 ## What it does
 

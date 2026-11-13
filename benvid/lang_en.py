@@ -179,6 +179,11 @@ EN: dict[str, str] = {
         "Works offline: your files never leave your computer. No ads, no data collection.",
     "Автор: {a}": "Author: {a}",
     "Сайт: {s}": "Website: {s}",
+    "Офіційно: {s} · {g} · Microsoft Store": "Official: {s} · {g} · Microsoft Store",
+    "Офіційні джерела: сайт, GitHub, Microsoft Store": "Official sources: website, GitHub, Microsoft Store",
+    "Сайт InkReel": "InkReel website",
+    "Код і релізи на GitHub": "Code and releases on GitHub",
+    "Сторінка в Microsoft Store": "Microsoft Store page",
     "Зв'язок: {c}": "Contact: {c}",
     "Використано: Python, Tk, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.":
         "Built with: Python, Tk, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.",

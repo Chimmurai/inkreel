@@ -222,17 +222,32 @@ def test_about_mentions_author_fields_only_when_filled(monkeypatch):
     i18n.set_lang("uk")
     monkeypatch.setattr(meta, "AUTHOR", "")
     monkeypatch.setattr(meta, "SITE", "")
+    monkeypatch.setattr(meta, "REPO", "")
+    monkeypatch.setattr(meta, "STORE", "")
     monkeypatch.setattr(meta, "CONTACT", "")
     t = guide.about_text()
-    assert "Автор:" not in t and "Сайт:" not in t and "Зв'язок:" not in t
+    assert "Автор:" not in t and "Сайт:" not in t and "Офіційно:" not in t and "Зв'язок:" not in t
     monkeypatch.setattr(meta, "AUTHOR", "Іван")
     monkeypatch.setattr(meta, "SITE", "example.org")
     monkeypatch.setattr(meta, "CONTACT", "a@b.c")
     t = guide.about_text()
-    assert "Автор: Іван" in t and "Сайт: example.org" in t and "Зв'язок: a@b.c" in t
+    assert "Автор: Іван" in t and "Сайт: example.org" in t and "Зв'язок: a@b.c" in t        # без репозиторію й Store - лише сайт
     i18n.set_lang("en")
     t = guide.about_text()
     assert "Author: Іван" in t and "Website: example.org" in t and "Contact: a@b.c" in t
+
+
+def test_about_lists_all_three_official_sources_in_both_languages():
+    """сайт, GitHub і Store названо в «Про програму» й у меню футера: за цим відрізняють оригінал від клонів"""
+    assert meta.SITE.startswith("https://inkreel.raimex.space") and meta.REPO == "https://github.com/Chimmurai/inkreel"
+    assert meta.STORE == "https://apps.microsoft.com/detail/9NW62SPG91ZR"
+    assert [u for _, u in meta.links()] == [meta.SITE, meta.REPO, meta.STORE]
+    for lang, word in (("uk", "Офіційно:"), ("en", "Official:")):
+        i18n.set_lang(lang)
+        t = guide.about_text()
+        assert word in t and "inkreel.raimex.space" in t and "github.com/Chimmurai/inkreel" in t and "Microsoft Store" in t
+        assert all(i18n.tr(n) != n for n, _ in meta.links()) == (lang == "en")      # англійською кожен підпис має переклад
+    i18n.set_lang("uk")
 
 
 # ---------------------------------------------------------------- повідомлення про помилки з відео/фото

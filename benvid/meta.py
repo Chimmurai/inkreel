@@ -8,6 +8,19 @@ APP = "InkReel"
 AUTHOR = "Raimex"       # ім'я або нік автора
 SITE = "https://inkreel.raimex.space"   # сторінка проєкту (https://…)
 CONTACT = "raimex.crucible@gmail.com"   # пошта чи нік для зв'язку
+# Офіційні джерела: лише ці три (сайт, код і релізи, сторінка в Store). Вони ж зазначені на сайті й у README, щоб клон легко відрізнити від оригіналу.
+REPO = "https://github.com/Chimmurai/inkreel"
+STORE = "https://apps.microsoft.com/detail/9NW62SPG91ZR"
+
+
+def short(url: str) -> str:
+    """адреса для показу в тексті: без схеми й кінцевого слеша"""
+    return url.split("://", 1)[-1].rstrip("/")
+
+
+def links() -> list[tuple[str, str]]:
+    """[(підпис українською, адреса)] для меню в футері; порожні адреси пропускаємо"""
+    return [(n, u) for n, u in (("Сайт InkReel", SITE), ("Код і релізи на GitHub", REPO), ("Сторінка в Microsoft Store", STORE)) if u]
 
 # «Пригости автора печивом»: посилання на сервіси донатів - [(назва, адреса)], напр. [("Ko-fi", "https://ko-fi.com/…"),
 # ("Monobank", "https://send.monobank.ua/jar/…")]. Одне посилання - кнопка відкриває його одразу, кілька - показує меню.

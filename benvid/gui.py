@@ -1596,6 +1596,10 @@ class App(tk.Tk):
         bar.columnconfigure(2, weight=1, uniform="foot")
         self.about_lbl = tk.Label(bar, text="", bg=BG, fg=DIM, font=FONT_S, justify="left", anchor="nw", padx=0, pady=0)
         self.about_lbl.grid(row=0, column=0, sticky="nw")
+        if meta.links():                                  # клік по «InkReel 1.0.0»: меню з офіційними посиланнями (сайт, GitHub, Store)
+            self.about_lbl.config(cursor="hand2")
+            self.about_lbl.bind("<Button-1>", self._links_menu)
+            self._tip(self.about_lbl, "Офіційні джерела: сайт, GitHub, Microsoft Store")
         self.btn_donate = None
         if meta.donate_enabled():
             self.btn_donate = PixButton(bar, "", command=self._donate, width=288, height=H_M, icon="cookie")
@@ -1674,6 +1678,17 @@ class App(tk.Tk):
             self._tip_n = guide.tip(self._tip_n)            # у футер зайшли заново: нова порада
             self._fill_tip()
         self.pstack.go(0 if self.pstack.tcur > 0 else 1)
+
+    def _links_menu(self, event=None):
+        """офіційні посилання: сайт, код і релізи на GitHub, сторінка в Microsoft Store"""
+        m = tk.Menu(self, tearoff=0, bg=BG, fg=FG, activebackground=FG, activeforeground=BG, bd=1, relief="flat", font=FONT_S)
+        for name, url in meta.links():
+            m.add_command(label=tr(name), command=lambda u=url: webbrowser.open(u))
+        b = self.about_lbl
+        try:
+            m.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
+        finally:
+            m.grab_release()
 
     def _donate(self):
         links = list(meta.DONATE)
