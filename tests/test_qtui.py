@@ -206,6 +206,60 @@ def test_window_exports_a_photo_a_gif_and_a_video_with_progress(qapp, win, tmp_p
     assert win.btn_export.enabled
 
 
+def test_footer_page_opens_with_f1_picks_guide_tabs_and_returns(qapp, win):
+    from benvid import guide
+    win.resize(1280, 860)
+    spin(qapp, lambda: win.pstack.max_off > 0, timeout=5)
+    assert win.pstack.max_off > 0 and win.page_bar.isVisible(), "сторінка з двох екранів, смужка завжди видна"
+    assert win.foot_col.width() == max(560, min(win.page.width() - win.page_bar.bw - 48, 980))
+    assert list(win.guide_tabs) == list(guide.SECTIONS)
+    win._goto_guide()
+    assert spin(qapp, lambda: win.pstack.cur == 1 and win.pstack.idle, timeout=5), "F1 / «?»: до футера"
+    sec = guide.SECTIONS[2]
+    win.guide_tabs[sec].cmd()
+    assert win.guide_sel == sec and win.guide_lbl.text_ == guide.body(sec) and win.guide_tabs[sec].on
+    assert win.guide_box.height() >= win.guide_lbl.winfo_reqheight() - 6, "висота гайда - за найвищим розділом"
+    win._goto_guide()
+    assert spin(qapp, lambda: win.pstack.cur == 0 and win.pstack.idle, timeout=5), "ще раз - назад до програми"
+
+
+def test_footer_tip_is_silent_while_exporting_and_texts_follow_the_language(qapp, win):
+    assert win.tip_wrap.isVisibleTo(win.foot) and win.tip_lbl.text_
+    win.export.running = True
+    win._fill_tip()
+    assert not win.tip_wrap.isVisibleTo(win.foot)
+    win.export.running = False
+    win._set_lang("en")
+    assert win.btn_top.text and win.btn_top.text != "Нагору"
+    assert win.phil_lbl.text_.startswith("“") and win.foot_box.title.text_ == win.foot_box.title.text_.upper()
+    win._set_lang("uk")
+    assert win.phil_lbl.text_.startswith("«") and win.btn_top.text == "Нагору"
+
+
+def test_footer_tabs_share_extra_pixels_like_tk_grid(qapp):
+    from benvid.qtui.footer import UniformRow
+    from benvid.qtui.pix import PixButton
+    row = UniformRow(None, 8, 30)
+    bs = [PixButton(row, "", width=60, height=30) for _ in range(6)]
+    for b in bs:
+        row.add(b)
+    row.resize(962, 30)
+    row.show()
+    assert [b.width() for b in bs] == [153, 154, 154, 153, 154, 154] and bs[1].x() == 161 and sum(b.width() for b in bs) + 5 * 8 == 962
+
+
+def test_label_wrap_counts_the_space_after_a_word_like_tk(qapp):
+    from PySide6.QtGui import QFontMetrics
+    from benvid.qtui.labels import wrap_text
+    from benvid.qtui.theme import tk_font
+    fm = QFontMetrics(tk_font(("Consolas", 12, "bold")))
+    w = fm.horizontalAdvance("aaaa bbbb ")
+    assert wrap_text("aaaa bbbb cccc", w, fm)[0] == "aaaa bbbb", "слово + пробіл за ним влазять"
+    assert wrap_text("aaaa bbbb cccc", w - 1, fm)[0] == "aaaa", "слово влазить, а разом із наступним пробілом - ні (Tk переносить)"
+    w = fm.horizontalAdvance("aaaa bbbb")
+    assert wrap_text("aaaa bbbb", w, fm) == ["aaaa bbbb"], "останнє слово абзацу пробілу не має"
+
+
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     seeks = []
     monkeypatch.setattr(win.player, "seek", lambda f: seeks.append(int(f)))

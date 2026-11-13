@@ -257,7 +257,7 @@ def _isolated_settings(ui):
         json.dump({"ui": ui}, f)
 
 
-def grab_screen_tk(w, h, ui, media=None, wait=6.0):
+def grab_screen_tk(w, h, ui, media=None, wait=6.0, footer=False):
     import tkinter  # noqa: F401
     from PIL import ImageGrab
     _isolated_settings(ui)
@@ -273,13 +273,19 @@ def grab_screen_tk(w, h, ui, media=None, wait=6.0):
     while time.time() < end:
         app.update()
         time.sleep(0.02)
+    if footer:
+        app._goto_guide()
+        end = time.time() + 2.0
+        while time.time() < end:
+            app.update()
+            time.sleep(0.02)
     x, y = app.winfo_rootx(), app.winfo_rooty()
     img = np.asarray(ImageGrab.grab(bbox=(x, y, x + app.winfo_width(), y + app.winfo_height())).convert("RGB"))
     app.destroy()
     return img
 
 
-def grab_screen_qt(w, h, ui, media=None, wait=6.0):
+def grab_screen_qt(w, h, ui, media=None, wait=6.0, footer=False):
     from PySide6.QtGui import QImage
     from PySide6.QtWidgets import QApplication
     _isolated_settings(ui)
@@ -296,6 +302,12 @@ def grab_screen_qt(w, h, ui, media=None, wait=6.0):
     while time.time() < end:
         app.processEvents()
         time.sleep(0.01)
+    if footer:
+        win._goto_guide()
+        end = time.time() + 2.0
+        while time.time() < end:
+            app.processEvents()
+            time.sleep(0.01)
     im = win.centralWidget().grab().toImage().convertToFormat(QImage.Format_RGB888)
     arr = np.frombuffer(im.constBits(), np.uint8).reshape(im.height(), im.bytesPerLine())[:, :im.width() * 3].reshape(im.height(), im.width(), 3).copy()
     win.close()
@@ -310,6 +322,11 @@ def main(argv):
         tk_img = grab_screen_tk(w, h, ui)
         qt_img = grab_screen_qt(w, h, ui)
         ok = compare("screen", tk_img, qt_img, threshold=0)
+        return 0 if ok else 1
+    if what == "footer":                                 # другий екран сторінки (гайд, філософія, про програму)
+        ui = {"lang": "uk", "palette": "Класика", "size": "Авто", "method": 4}
+        w, h = 1280, 860
+        ok = compare("footer", grab_screen_tk(w, h, ui, footer=True), grab_screen_qt(w, h, ui, footer=True), threshold=0)
         return 0 if ok else 1
     if what == "primitives":
         w, h = 180, 124

@@ -2,6 +2,8 @@
 пікселях жадібно за пробілами), `TkImage` (малюнок без полів), `TkStrip` (смуга з плиток через один елемент)."""
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QFontMetrics, QImage, QPainter
 from PySide6.QtWidgets import QSizePolicy, QWidget
@@ -21,9 +23,11 @@ def wrap_text(text: str, width: int, fm: QFontMetrics) -> list[str]:
             out.append(para)
             continue
         line = ""
-        for word in para.split(" "):
+        words = para.split(" ")
+        for k, word in enumerate(words):
             cand = word if not line else line + " " + word
-            if fm.horizontalAdvance(cand) <= width:
+            # Tk міряє слово разом із пробілом, що за ним (крім останнього слова абзацу): рядок «влазить», лише якщо влазить і цей пробіл
+            if fm.horizontalAdvance(cand + (" " if k < len(words) - 1 else "")) <= width:
                 line = cand
                 continue
             if line:
@@ -131,7 +135,7 @@ class TkLabel(QWidget):
         iw, ih = self.width() - 2 * ix, self.height() - 2 * iy
         th = fm.height() * len(lines)
         fx, fy = _ANCHOR.get(self.anchor, (.5, .5))
-        top = iy + int(fy * (ih - th))
+        top = iy + math.floor(fy * (ih - th))              # текст вищий за поле (ih < th): Tk піднімає його, а не опускає (floor, не int)
         for k, s in enumerate(lines):
             lw = fm.horizontalAdvance(s)
             if self.justify == "center":

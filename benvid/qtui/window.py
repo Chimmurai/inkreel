@@ -1,7 +1,7 @@
 """Головне вікно на Qt: розкладка перенесена з `benvid/gui.py` (`_build`, `_build_side`) з тими самими константами, відступами й віджетами,
 що й Tk-версія, тож вигляд 1:1 (звірка: `tools/ui_diff.py screen`).
 
-Стан: екран застосунку (шапка, смуги, екран кадра, права панель з чотирма секціями, перемотування й транспорт) перенесено, логіка: відкриття файла,
+Стан: екран застосунку (шапка, смуги, екран кадра, права панель з чотирма секціями, перемотування й транспорт) і футер (`footer.py`) перенесено, логіка: відкриття файла,
 відтворення, перемотування, рівні, «Чорнило/Символи», розміри, палітри, мова, експорт. Решта чеклиста - у `docs/QT_PORT.md`."""
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import time
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QMainWindow, QMessageBox, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QGridLayout, QHBoxLayout, QMainWindow, QMessageBox, QSizePolicy, QVBoxLayout, QWidget
 
 from .. import i18n, palette
 from ..core import BRANCH, MAIN_LEVELS, METHOD_INFO, METHODS, Params
@@ -25,6 +25,7 @@ from . import assets
 from .boxes import PixCombo, PixEntry, SectionBox
 from .consts import (AUTO, BAR_H, EDGE_W, FONT, FONT_B, FONT_S, G, GG, H_L, H_M, H_S, HEAD_W, M, MIN_MAIN, SB_W, SIDE_W, TOG_W, W_SQ)
 from .export import ExportController
+from .footer import FooterMixin
 from .labels import TkImage, TkLabel, TkStrip
 from .pix import PixButton, PixProgress, PixScroll, PixSlider, QualityBar
 from .stacks import PageStack, ScrollStack
@@ -55,9 +56,18 @@ def _fixed(b: PixButton, w: int) -> PixButton:
     return b
 
 
-class MainWindow(QMainWindow):
+class MainWindow(FooterMixin, QMainWindow):
     TITLE = "InkReel"
     SEEK_GAP = 0.04
+
+    @property
+    def _tip_n(self) -> int:
+        """номер поради: спільний для порожнього екрана (поверхня) і футера"""
+        return self.surface._tip_n
+
+    @_tip_n.setter
+    def _tip_n(self, v: int):
+        self.surface._tip_n = v
 
     def __init__(self, path: str | None = None):
         super().__init__()
@@ -110,6 +120,10 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.Key_Left), self, activated=lambda: self._step(-1))
         QShortcut(QKeySequence(Qt.Key_Right), self, activated=lambda: self._step(1))
         QShortcut(QKeySequence("I"), self, activated=self._toggle_inv)
+        QShortcut(QKeySequence(Qt.Key_F1), self, activated=self._goto_guide)
+        QShortcut(QKeySequence(Qt.Key_PageUp), self, activated=lambda: None if self._typing() else self.pstack.step(-1))
+        QShortcut(QKeySequence(Qt.Key_PageDown), self, activated=lambda: None if self._typing() else self.pstack.step(1))
+        self._wheel_acc = 0
         if path and os.path.isfile(path):
             QTimer.singleShot(50, lambda: self._open(path))
 
@@ -119,11 +133,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.page)
         self.main = Frame(self.page)
         self.foot = Frame(self.page)
-        self.foot.setMinimumHeight(0)
         self.page_bar = PixScroll(self.page, SB_W)
         self.pstack = PageStack(self.page, self.page_bar, [(self.main, lambda w, h: max(h, MIN_MAIN), None),
-                                                           (self.foot, lambda w, h: max(h, 120), None)])
-        self.foot.hide()
+                                                           (self.foot, lambda w, h: max(h, self.foot.winfo_reqheight()), self._foot_fit)])
         main = _vbox(self.main)
 
         # шапка: маскот, логотип, меню; праворуч [ім'я файлу] [?] [UA|EN]
@@ -147,7 +159,7 @@ class MainWindow(QMainWindow):
         tl.addSpacing(0)
         tl.addWidget(self.title_lbl, 1, Qt.AlignVCenter)
         tl.addSpacing(M)
-        self.btn_help = _fixed(PixButton(top, "?", command=lambda: None, width=W_SQ, height=H_M), W_SQ)
+        self.btn_help = _fixed(PixButton(top, "?", command=self._goto_guide, width=W_SQ, height=H_M), W_SQ)
         self.btn_ua = _fixed(PixButton(top, "UA", command=lambda: self._set_lang(i18n.UK), width=W_SQ, height=H_M), W_SQ)
         self.btn_en = _fixed(PixButton(top, "EN", command=lambda: self._set_lang(i18n.EN), width=W_SQ, height=H_M, join="l"), W_SQ)
         tl.addWidget(self.btn_help, 0, Qt.AlignVCenter)
@@ -227,6 +239,7 @@ class MainWindow(QMainWindow):
         rl.addWidget(self.stat_lbl, 1, Qt.AlignVCenter)
         bl.addWidget(row)
         main.addWidget(bot)
+        self._build_footer()
 
     def _section(self, parent_lay, last=False):
         s = SectionBox("", None, last=last)
@@ -422,6 +435,7 @@ class MainWindow(QMainWindow):
         self._sync_fps()
         self._update_range()
         self.surface.rebuild_empty()
+        self._fill_footer()
         if self._exp_msg[0]:
             self.prog_lbl.config(text=tr(self._exp_msg[0], **self._exp_msg[1]))
         self.pal_lbl.config(text=tr(self.pal_name))
@@ -481,12 +495,13 @@ class MainWindow(QMainWindow):
         if code != i18n.lang():
             i18n.set_lang(code)
             self._tr()
+            self.pstack.layout()
             self._save()
 
     def _save(self):
         d = dict(self.ui)
         d.update(palette=self.pal_name, pal_inv=bool(self.pal_inv), method=self.params.method, glyph=bool(self.params.glyph), size=self.size_key,
-                 lang=i18n.lang(), gdens3=int(self.params.gdens))
+                 lang=i18n.lang(), gdens3=int(self.params.gdens), guide=self.guide_sel)
         try:
             save_settings({"ui": d})
         except Exception:  # noqa: BLE001
@@ -563,6 +578,7 @@ class MainWindow(QMainWindow):
         except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "InkReel", tr("Не вдалося відкрити файл:\n{e}\n\nДеталі: {p}", e=e, p=""))
             return
+        self._show_app()
         self.ready = True
         self.path = path
         self.kind = info["kind"]
@@ -628,6 +644,7 @@ class MainWindow(QMainWindow):
         if os.path.normcase(os.path.abspath(out)) == os.path.normcase(os.path.abspath(self.path)):
             self._say("Не можна зберегти поверх оригіналу — вибери інше ім'я")
             return
+        self._show_app()
         pl = self.player
         pl.pause()
         self.btn_play.set_icon("play")
@@ -709,6 +726,37 @@ class MainWindow(QMainWindow):
             self.seek.set_ranges([tuple(r) for r in rs])
             st = {"playing": "відтворення", "buffering": "буферизація…", "paused": "пауза"}[pl.state]
             self.stat_lbl.config(text=f"{tr(st)} · {tr('обробка {r:.0f} к/с', r=pl.render_fps())} · {pl.workers}×")
+
+    def _typing(self) -> bool:
+        """фокус у полі введення: клавіші-літери й PgUp/PgDn тоді належать полю"""
+        from PySide6.QtWidgets import QLineEdit
+        return isinstance(QApplication.focusWidget(), QLineEdit)
+
+    @staticmethod
+    def _inside(w, root) -> bool:
+        while w is not None:
+            if w is root:
+                return True
+            w = w.parentWidget()
+        return False
+
+    def wheelEvent(self, e):
+        """колесо - одне на все вікно (як App._on_wheel): над картинкою масштаб (її wheelEvent приймає подію), над правою панеллю, якщо вона
+        не влазить, - її прокрутка, деінде - прокрутка сторінки до футера й назад"""
+        self._wheel_acc += e.angleDelta().y()
+        steps = int(self._wheel_acc / 120)               # дрібні кроки тачпада накопичуємо до цілого «клацання»
+        if not steps:
+            e.accept()
+            return
+        self._wheel_acc -= steps * 120
+        sg = 1 if steps > 0 else -1
+        w = QApplication.widgetAt(e.globalPosition().toPoint())
+        for _ in range(abs(steps)):
+            if self._inside(w, self.side) and self.sstack.overflow:
+                self.sstack.notch(sg)
+            elif self.pstack.enabled:
+                self.pstack.notch(sg)
+        e.accept()
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

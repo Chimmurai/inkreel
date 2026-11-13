@@ -150,6 +150,7 @@ class FrameSurface(QWidget):
 
     def wheelEvent(self, e):
         if self.mask is None:
+            e.accept()                                   # як у Tk: над порожнім екраном колесо нічого не прокручує
             return
         d = 1 if e.angleDelta().y() > 0 else -1
         h, w = self.mask.shape
