@@ -17,6 +17,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from benvid import engine, i18n, palette, view  # noqa: E402
+from benvid.qtui.consts import AUTO  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -134,6 +135,8 @@ def win(qapp, tmp_path, monkeypatch):
     w.show()
     yield w
     w.close()
+    w.ready = False                                      # закрите вікно лишається живим у Qt: його такт не повинен ходити до плеєра (у зламаного пулу замок може тримати чужий потік)
+    w.tick.stop()
 
 
 def test_window_palette_language_and_level_controls(qapp, win):
@@ -203,7 +206,7 @@ def test_window_exports_a_photo_a_gif_and_a_video_with_progress(qapp, win, tmp_p
     assert spin(qapp, lambda: win.export.running, timeout=5)
     win.export.stop()
     assert spin(qapp, lambda: not win.export.running, timeout=60)
-    assert win.btn_export.enabled
+    assert spin(qapp, lambda: win.btn_export.enabled, timeout=10), "після скасування кнопки знову активні (сигнал finished доходить трохи пізніше за running=False)"
 
 
 def test_footer_page_opens_with_f1_picks_guide_tabs_and_returns(qapp, win):
@@ -279,7 +282,7 @@ def test_tips_show_after_a_delay_one_at_a_time_and_vanish_on_leave(qapp, win, mo
     assert Tip._cur is None, "підказка не одразу"
     assert spin(qapp, lambda: Tip._cur is not None, timeout=3)
     t1 = Tip._cur
-    assert t1._win.isVisible() and t1._win.lines == ["підказка №1"]
+    assert t1._win.isVisible() and t1._win.lines[0].startswith("підказка №")      # (справжній Enter від показу віджета теж може запустити таймер: номер не важливий)
     QApplication.sendEvent(win.btn_open, QEvent(QEvent.Enter))
     assert spin(qapp, lambda: Tip._cur is not None and Tip._cur is not t1, timeout=3), "перейшли на іншу кнопку - підказка тепер її"
     assert t1._win is None, "стара прибрана"
@@ -515,6 +518,181 @@ def test_fragment_marks_flags_reset_and_export_range(qapp, vwin, monkeypatch, tm
     w._update_range()
     w._open(w.path)
     assert w.seek.marks == [0, w.player.n - 1], "новий файл - фрагмент скинуто"
+
+
+def test_custom_size_is_validated_applied_and_pastes_replace_the_field(qapp, vwin, monkeypatch):
+    w = vwin
+    sizes = []
+    monkeypatch.setattr(w.player, "set_size", lambda k: sizes.append(k))
+    before = w.size_key
+    for tw, th in (("1", ""), ("5000", ""), ("", ""), ("abc", "1"), ("100", "9999")):
+        w.ent_w.setText(tw)
+        w.ent_h.setText(th)
+        w._apply_custom()
+        assert w.size_key == before and "2…4096" in w.prog_lbl.text_, (tw, th)
+    w.ent_w.setText("")
+    w.ent_h.setText("720")
+    QTest.keyClick(w.ent_h, Qt.Key_Return)                   # Enter у полі - те саме, що «OK»
+    assert w.size_key == "x720" and sizes[-1] == "x720" and not any(b.on for b in w.size_btns.values())
+    w.ent_w.setText("800")
+    w.ent_h.setText("")
+    w.btn_ok.cmd()
+    assert w.size_key == "800x" and sizes[-1] == "800x"
+    cb = QApplication.clipboard()
+    cb.setText("1920x1080")
+    w.ent_w.setText("1")
+    w.ent_w.paste_hook(w.ent_w)
+    assert (w.ent_w.text(), w.ent_h.text()) == ("1920", "1080"), "«1920x1080» лягає в обидва поля"
+    cb.setText("1280х720")                                # кирилична «х»
+    w._paste_replace(w.ent_h)
+    assert (w.ent_w.text(), w.ent_h.text()) == ("1280", "720")
+    cb.setText("abc 12345678\nдруга")
+    w._paste_replace(w.ent_w)
+    assert w.ent_w.text() == "12345", "у поле розміру лягають лише цифри (до п'яти), лише перший рядок"
+
+
+def test_saved_custom_size_survives_a_restart_but_a_dead_preset_does_not(qapp, win, tmp_path):
+    from benvid.qtui.window import MainWindow
+    for saved, want in (("x720", "x720"), ("1280x", "1280x"), ("2K", "Авто"), ("720p", "720p"), (None, "Авто")):
+        (tmp_path / "settings.json").write_text(json.dumps({"ui": {"lang": "uk", "size": saved}} if saved else {"ui": {"lang": "uk"}}), encoding="utf-8")
+        w2 = MainWindow()
+        try:
+            assert w2.size_key == want, (saved, w2.size_key)
+        finally:
+            w2.close()
+
+
+def test_auto_size_is_picked_in_the_background_and_a_stale_answer_is_ignored(qapp, vwin, monkeypatch):
+    w = vwin
+    monkeypatch.setattr(w.player, "auto_pick", lambda: "480p")
+    sizes = []
+    real = w.player.set_size
+    monkeypatch.setattr(w.player, "set_size", lambda k: (sizes.append(k), real(k)))
+    w._set_size("720p")
+    assert w._auto_size is None and sizes[-1] == "720p"
+    w._set_size(AUTO)
+    assert sizes[-1] == "240p", "поки рахується - тимчасово 240p"
+    assert spin(qapp, lambda: w._auto_size == "480p", timeout=10)
+    assert sizes[-1] == "480p" and w._size_key() == "480p" and "авто" in w.size_lbl.text_
+    tok = w._auto_tok
+    w._auto_done(tok - 1, "1080p")
+    assert w._auto_size == "480p", "запізнілий токен ігнорується"
+    w._set_size("360p")
+    w._auto_done(w._auto_tok, "1080p")
+    assert w._auto_size is None and w._size_key() == "360p", "вибрали інший розмір - «Авто» вже не діє"
+
+
+def test_size_label_and_min_size_note_for_ink_and_glyphs(qapp, vwin, monkeypatch):
+    from benvid.qtui import sizectl
+    w = vwin
+    w._set_size("360p")
+    t = w.size_lbl.text_
+    assert t.startswith("→") and "джерело 160×90" in t and "символ" not in t
+    monkeypatch.setattr(w, "_reparam", lambda: None)
+    w._set_glyph(True)
+    t = w.size_lbl.text_
+    assert "символів" in t and "px)" in t and "Щільність знаків" in w.dens_lbl.text_ and "клітинка" in w.dens_lbl.text_
+    monkeypatch.setattr(sizectl, "out_size", lambda *a: (1, 1))
+    w._note_min_size()
+    assert "Розмір піднято до одного символа" in w.prog_lbl.text_
+    w._set_glyph(False)
+    assert "символів" not in w.size_lbl.text_
+    i18n.set_lang("en")
+    try:
+        w._tr()
+        assert w.size_lbl.text_.startswith("→") and "source" in w.size_lbl.text_.lower()
+    finally:
+        i18n.set_lang("uk")
+        w._tr()
+
+
+def test_level_irnm1_branch_steps_aside_in_glyphs_and_comes_back(qapp, win, monkeypatch):
+    started = []
+    monkeypatch.setattr(win, "_neuro_start", lambda: started.append(1))
+    win._set_level(BRANCH_LEVEL())
+    assert win.params.method == BRANCH_LEVEL() and started == [1]
+    win._set_glyph(True)
+    assert win.params.method == 5 and win._branch_back and win.params.glyph
+    win._set_glyph(False)
+    assert win.params.method == BRANCH_LEVEL() and not win._branch_back
+    win._set_glyph(True)
+    win._set_level(3)
+    win._set_glyph(False)
+    assert win.params.method == 3, "вибір рівня в символах скасовує повернення IRNM1"
+
+
+def BRANCH_LEVEL():
+    from benvid.core import BRANCH
+    return BRANCH
+
+
+def test_fps_limit_list_typed_number_and_what_is_remembered(qapp, vwin, monkeypatch):
+    w = vwin
+    lims = []
+    monkeypatch.setattr(w.player, "set_fps_limit", lambda v: lims.append(v))
+    src = w._src_fps()
+    assert abs(src - 23.976) < 0.01
+    items = [w.fps_cb.itemText(i) for i in range(w.fps_cb.count())]
+    assert "оригіналі" in items[0] and "23.976" in items[0] and items[1:] == ["Кадри: 20 к/с", "Кадри: 15 к/с", "Кадри: 12 к/с", "Кадри: 10 к/с"]
+    assert w._fps_limit() is None and w.fps_cb.currentIndex() == 0
+    w._on_fps_pick(2)
+    assert w.fps_sel == 15.0 and w._fps_limit() == 15.0 and lims[-1] == 15.0
+    le = w.fps_cb.lineEdit()
+    le.setText("7,5")
+    w._on_fps_typed()
+    assert w.fps_sel == 7.5 and lims[-1] == 7.5 and "7.5" in w.fps_cb.currentText()
+    le.setText("999")
+    w._on_fps_typed()
+    assert w.fps_sel == 0.0 and w._fps_limit() is None and lims[-1] is None and w.fps_cb.currentIndex() == 0, "від частоти відео й вище - як в оригіналі"
+    le.setText("нічого")
+    w._on_fps_pick(3)
+    le.setText("нічого")
+    w._on_fps_typed()
+    assert w.fps_sel == 12.0, "не число - лишається попереднє"
+    n = len(lims)
+    w._on_fps_typed()
+    assert len(lims) == n, "нічого не вписано - вибір не чіпаємо"
+    le.setText("Кадри: 25 к/с")
+    le.select_value()
+    assert le.selectedText() == "25 к/с", "виділяється лише значення після двокрапки"
+
+
+def test_fps_limit_does_not_apply_to_photos_and_gifs_and_goes_to_the_export(qapp, vwin, monkeypatch, tmp_path):
+    from benvid.qtui import window as W
+    w = vwin
+    w._on_fps_pick(1)
+    assert w.fps_sel == 20.0
+    out = tmp_path / "x.mp4"
+    monkeypatch.setattr(W.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(out), "")))
+    kw = {}
+    monkeypatch.setattr(w.export, "start", lambda **k: kw.update(k))
+    w._export()
+    w.player.suspend(False)
+    assert kw["fps"] == 20.0
+    w.kind = "image"
+    assert w._src_fps() == 0.0 and w._fps_limit() is None, "для не-відео ліміт не діє"
+    w.kind = "video"
+
+
+def test_format_quality_audio_fps_and_size_are_saved(qapp, vwin):
+    w = vwin
+    fmts = [w.fmt_cb.itemData(i) for i in range(w.fmt_cb.count())]
+    assert len(fmts) >= 2
+    w.fmt_cb.setCurrentIndex(1)
+    w._on_fmt_pick(1)
+    w.q_cb.setCurrentIndex(w.q_cb.count() - 1)
+    w._on_q_pick(w.q_cb.count() - 1)
+    w.btn_aud.set_on(False)
+    w._on_fps_pick(3)
+    w._set_size("360p")
+    w._save()
+    ui = json.loads(open(engine.SETTINGS_FILE, encoding="utf-8").read())["ui"]
+    assert ui["fmt"] == fmts[1] and ui["quality"] == w.q_cb.currentData() and ui["audio"] is False and ui["fps"] == 12.0 and ui["size"] == "360p"
+    w.kind = "gif"                                            # для GIF/фото формат відео в налаштуваннях не перезаписується
+    w._fill_formats()
+    w._save()
+    assert json.loads(open(engine.SETTINGS_FILE, encoding="utf-8").read())["ui"]["fmt"] == fmts[1]
+    w.kind = "video"
 
 
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):

@@ -9,7 +9,7 @@ import os
 import sys
 import time
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QFileDialog, QGridLayout, QHBoxLayout, QMainWindow, QMessageBox, QSizePolicy, QVBoxLayout, QWidget
 
@@ -30,6 +30,7 @@ from .footer import FooterMixin
 from .labels import TkImage, TkLabel, TkStrip
 from .pix import PixButton, PixProgress, PixScroll, PixSlider, QualityBar
 from .playctl import Gap, PlayerMixin
+from .sizectl import SizeMixin
 from .stacks import PageStack, ScrollStack
 from .surface import FrameSurface
 from .theme import THEME
@@ -58,9 +59,10 @@ def _fixed(b: PixButton, w: int) -> PixButton:
     return b
 
 
-class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
+class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, QMainWindow):
     TITLE = "InkReel"
     SEEK_GAP = 0.04
+    auto_done = Signal(int, str)                 # результат підбору розміру «Авто» з фонового потоку (токен, ключ розміру)
 
     @property
     def _tip_n(self) -> int:
@@ -94,7 +96,16 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
             self.pal_name = palette.CLASSIC
         self.pal_inv = bool(ui.get("pal_inv"))
         sz = ui.get("size", AUTO)
-        self.size_key = sz if sz in SIZE_KEYS else AUTO
+        if sz not in SIZE_KEYS and not (isinstance(sz, str) and "x" in sz.lower() and sz.lower().rstrip("p") == sz.lower()):
+            sz = AUTO                                   # застарілий пресет (напр. 2K) з файлу налаштувань; власні ключі «AxB», «Ax», «xB» лишаються
+        self.size_key = sz
+        self._auto_size, self._auto_tok, self._branch_back = None, 0, False
+        try:
+            self.fps_sel = max(0.0, float(ui.get("fps", 0) or 0))   # ліміт к/с, який хоче користувач (0 - як в оригіналі); діє, коли він нижчий за fps відео
+        except (TypeError, ValueError):
+            self.fps_sel = 0.0
+        self._fps_vals = [0]
+        self._fps_orig = self._fps_shown = ""
         self.player = Player()
         self.player.params = self.params
         self.ready = False
@@ -114,6 +125,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         self.export.progress.connect(self._on_progress)
         self.export.live.connect(self._on_live)
         self.export.finished.connect(self._on_export_done)
+        self.auto_done.connect(self._auto_done)
         self.tick = QTimer(self)
         self.tick.timeout.connect(self._tick)
         self.tick.start(8)
@@ -323,13 +335,16 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         rl.addWidget(self.lbl_custom, 0, Qt.AlignVCenter)
         rl.addSpacing(G)
         self.ent_w, self.ent_h = PixEntry(row), PixEntry(row)
+        for e in (self.ent_w, self.ent_h):
+            e.paste_hook = self._paste_replace            # вставка замінює вміст поля; «1920x1080» з буфера лягає одразу в обидва поля
+            e.returnPressed.connect(self._apply_custom)
         rl.addWidget(self.ent_w, 1)
         rl.addSpacing(G)
         rl.addWidget(TkLabel(row, "×", font=FONT_S), 0, Qt.AlignVCenter)
         rl.addSpacing(G)
         rl.addWidget(self.ent_h, 1)
         rl.addSpacing(G)
-        self.btn_ok = PixButton(row, "OK", command=lambda: None, width=70, height=H_S)
+        self.btn_ok = PixButton(row, "OK", command=self._apply_custom, width=70, height=H_S)
         self.btn_ok.setFixedWidth(70)
         rl.addWidget(self.btn_ok)
         b.addWidget(row)
@@ -368,6 +383,8 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         rl = _hbox(row)
         self.fmt_cb, self.q_cb = PixCombo(row), PixCombo(row)
         self.q_cb.setFixedWidth(Q_W)
+        self.fmt_cb.activated.connect(self._on_fmt_pick)
+        self.q_cb.activated.connect(self._on_q_pick)
         rl.addWidget(self.fmt_cb, 1)
         rl.addSpacing(G)
         rl.addWidget(self.q_cb)
@@ -376,7 +393,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         b.addItem(self.gap_row2)
         self.row2 = Frame(s.inner)
         r2 = _hbox(self.row2)
-        self.btn_aud = _fixed(PixButton(self.row2, "", command=lambda: None, width=TOG_W, height=H_S, toggle=True), TOG_W)
+        self.btn_aud = _fixed(PixButton(self.row2, "", command=self._save_later, width=TOG_W, height=H_S, toggle=True), TOG_W)
         self.btn_aud.set_on(bool(self.ui.get("audio", True)))
         self.rng_lbl = TkLabel(self.row2, "", font=FONT_S, anchor="w")
         self.btn_rng = _fixed(PixButton(self.row2, "", command=self._reset_range, width=TOG_W, height=H_S), TOG_W)
@@ -389,6 +406,12 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         self.gap_fps = Gap(0, M)
         b.addItem(self.gap_fps)
         self.fps_cb = PixCombo(s.inner, editable=True)
+        le = PixEntry(bare=True, select="value")           # не лише список: число можна вписати; при фокусі виділяється лише значення після двокрапки
+        le.paste_hook = self._paste_replace
+        self.fps_cb.setLineEdit(le)
+        self.fps_cb.activated.connect(self._on_fps_pick)
+        le.editingFinished.connect(self._on_fps_typed)
+        le.returnPressed.connect(self._on_fps_enter)
         self.row_fps = self.fps_cb
         b.addWidget(self.fps_cb)
         b.addSpacing(M)
@@ -451,6 +474,8 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
             b.set_on(k == self.size_key)
         self._fill_formats(keep=True)
         self._sync_fps()
+        self._show_dens()
+        self._update_size_label()
         self._update_range()
         self.surface.rebuild_empty()
         self._fill_footer()
@@ -459,24 +484,6 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         self.pal_lbl.config(text=tr(self.pal_name))
         self.title_lbl.config(text=self._name if self.ready else tr("— файл не відкрито —"))
         self.setWindowTitle(self.TITLE + (f" — {self._name}" if self.ready else ""))
-
-    def _src_fps(self) -> float:
-        try:
-            return float(self.player.fps or 0) if self.kind == "video" else 0.0
-        except Exception:  # noqa: BLE001
-            return 0.0
-
-    def _sync_fps(self):
-        """список «кадрів на секунду»: як в оригіналі й стандартні значення нижче за частоту відео (як App._sync_fps)"""
-        from ..video import fps_options
-        src = self._src_fps()
-        orig = tr("Кадри: як в оригіналі ({f:g} к/с)", f=round(src, 3)) if src else tr("Кадри: як в оригіналі")
-        vals = [orig] + [tr("Кадри: {f} к/с", f=f"{v:g}") for v in fps_options(src)]
-        self.fps_cb.blockSignals(True)
-        self.fps_cb.clear()
-        self.fps_cb.addItems(vals)
-        self.fps_cb.setCurrentIndex(0)
-        self.fps_cb.blockSignals(False)
 
     def _formats(self) -> dict:
         if self.kind == "video":
@@ -515,7 +522,10 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
     def _save(self):
         d = dict(self.ui)
         d.update(palette=self.pal_name, pal_inv=bool(self.pal_inv), method=self.params.method, glyph=bool(self.params.glyph), size=self.size_key,
-                 lang=i18n.lang(), gdens3=int(self.params.gdens), guide=self.guide_sel, volume=int(self.vol.v))
+                 fmt=(self.fmt_cb.currentData() or self.ui.get("fmt", "MP4 (H.264)")) if self.kind == "video" else self.ui.get("fmt", "MP4 (H.264)"),
+                 quality=self.q_cb.currentData() or self.ui.get("quality", "Висока"), audio=bool(self.btn_aud.on),
+                 lang=i18n.lang(), gdens3=int(self.params.gdens), guide=self.guide_sel, volume=int(self.vol.v), fps=self.fps_sel)
+        self.ui.update(d)                                # наступне збереження й відкриття файла бачать актуальні формат і якість
         try:
             save_settings({"ui": d})
         except Exception:  # noqa: BLE001
@@ -530,37 +540,37 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
 
     # ------------------------------------------------------------------------------ керування
     def _set_level(self, n: int):
+        self._branch_back = False
+        if n == self.params.method:
+            return
         self.params.method = n
         if n == BRANCH:
             self.params.glyph = False
+            self._neuro_start()
         self._tr()
-        self._reparam()
-        self._save()
-
-    def _apply_gdens(self, n: int):
-        self.params.gdens = n
         self._reparam()
         self._save()
 
     def _set_glyph(self, v: bool):
+        v = bool(v)
+        if v == self.params.glyph:
+            return
         self.params.glyph = v
-        if v and self.params.method == BRANCH:
+        if v and self.params.method > MAIN_LEVELS:                  # у символах п'ять рівнів: IRNM1 відкладається й повертається з чорнилом
+            self._branch_back = True
             self.params.method = MAIN_LEVELS
+        elif not v and self._branch_back:
+            self._branch_back = False
+            self.params.method = BRANCH
         self.m_slider.set_branch(not v)
         self.dens_box.setVisible(v)
+        if self.kind == "image":                                    # у списку форматів фото є .txt лише для символів
+            self._fill_formats(keep=True)
         self._tr()
         self._reparam()
-        self._save()
-
-    def _reparam(self):
-        if self.ready:
-            self.player.set_params(self.params)
-
-    def _set_size(self, k: str):
-        self.size_key = k
-        self._tr()
-        if self.ready:
-            self.player.set_size("240p" if k == AUTO else k)
+        self._show_dens()
+        self._update_size_label()
+        self._note_min_size()
         self._save()
 
     def _step_palette(self, d: int):
@@ -605,7 +615,11 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         self.seek.set(0)
         self._reset_range()
         self.btn_play.set_icon("play")
-        self._tr()
+        if self.player.baked:
+            self._auto_tok += 1                           # запізнілий автовибір попереднього файлу не повинен чіпати цей
+        elif self.size_key == AUTO:
+            self._auto_resolve()
+        self._tr()                                        # (тут же підпис розміру й кадри на секунду під новий файл)
 
     def _toggle(self):
         if self.export.running:
@@ -629,9 +643,6 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
             self.player.seek(int(v))
 
     # ------------------------------------------------------------------------------ експорт
-    def _size_key(self) -> str:
-        return "720p" if self.size_key == AUTO else self.size_key
-
     def _export(self):
         if not self.ready or self.export.running:
             return
@@ -676,7 +687,8 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
         self._prog_done = False
         self._say("Обробка…")
         self.export.start(kind=kind, path=self.path, out=out, params=self.params, fmt=fmt, size_key=size_key, quality=self.q_cb.currentData() or "Висока",
-                          pal_name=self._pal_key(), audio=self.btn_aud.on, cache=cache, src_fps=pl.fps or 24.0, n_frames=pl.n, a0=a0, b0=b0)
+                          pal_name=self._pal_key(), audio=self.btn_aud.on, cache=cache, src_fps=pl.fps or 24.0, n_frames=pl.n, a0=a0, b0=b0,
+                          fps=self._fps_limit() if kind == "video" else None)
         self._last_out = out
 
     def _say(self, key: str = "", **kw):

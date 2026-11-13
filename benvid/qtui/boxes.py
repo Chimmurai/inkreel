@@ -1,8 +1,8 @@
 """Будівельні цеглини розкладки в стилі Tk: рамка-секція із смужкою заголовка, поле введення, випадний список (піксельні, 1:1 з виглядом Tk-версії)."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
-from PySide6.QtGui import QPainter
+from PySide6.QtCore import QPoint, QRect, QSize, QTimer, Qt, Signal
+from PySide6.QtGui import QKeySequence, QPainter
 from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QSizePolicy, QVBoxLayout, QWidget
 
 from .consts import BAR_H, FONT, FONT_S, H_S, M
@@ -44,18 +44,52 @@ class SectionBox(Frame):
 class PixEntry(QLineEdit):
     """поле введення: плоске, рамка 1 px кольором тексту, шрифт Consolas bold, текст по центру (як tk.Entry у gui.py)"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, bare=False, select="all"):
+        """bare - поле без власної рамки й заввишки (всередині списку); select: при фокусі виділяти «all» чи лише «value» (після двокрапки: «Кадри: 25 к/с»)"""
         super().__init__(parent)
+        self.bare, self.select_mode = bare, select
+        self.paste_hook = None                         # функція(поле): вставка ЗАМІНЮЄ вміст (див. SizeMixin._paste_replace)
         self.setFont(tk_font(FONT))
-        self.setAlignment(Qt.AlignCenter)
-        self.setFixedHeight(H_S)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        if not bare:
+            self.setAlignment(Qt.AlignCenter)
+            self.setFixedHeight(H_S)
+            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         THEME.changed.connect(self._style)
         self._style()
 
     def _style(self):
         bg, fg = THEME.bg.name(), THEME.fg.name()
-        self.setStyleSheet(f"QLineEdit {{ background: {bg}; color: {fg}; border: 1px solid {fg}; padding: 0; selection-background-color: {fg}; selection-color: {bg}; }}")
+        border = "none" if self.bare else f"1px solid {fg}"
+        self.setStyleSheet(f"QLineEdit {{ background: {bg}; color: {fg}; border: {border}; padding: 0; selection-background-color: {fg}; selection-color: {bg}; }}")
+
+    def select_value(self):
+        """«Кадри: 25 к/с»: виділити лише те, що після двокрапки (його й замінюють набором чи вставкою) - як gui._select_value"""
+        if self.select_mode != "value":
+            return self.selectAll()
+        t = self.text()
+        i = t.find(":")
+        a = i + 1 if i >= 0 else 0
+        while a < len(t) and t[a] == " ":
+            a += 1
+        self.setSelection(a, len(t) - a)
+
+    def focusInEvent(self, e):
+        super().focusInEvent(e)
+        QTimer.singleShot(1, self.select_value)          # клік у поле виділяє його вміст: набір чи вставка замінюють
+
+    def focusOutEvent(self, e):
+        super().focusOutEvent(e)
+        self.deselect()
+
+    def keyPressEvent(self, e):
+        if self.paste_hook and (e.matches(QKeySequence.Paste) or (e.key() == Qt.Key_Insert and e.modifiers() & Qt.ShiftModifier)):
+            self.paste_hook(self)
+            e.accept()
+            return
+        super().keyPressEvent(e)
+
+    def contextMenuEvent(self, e):
+        pass                                             # як у Tk-версії контекстного меню нема
 
 
 class PixCombo(QComboBox):

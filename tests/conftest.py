@@ -142,8 +142,10 @@ def pytest_sessionfinish(session, exitstatus):
         time.sleep(15.0)
         os._exit(int(exitstatus))
     threading.Thread(target=_force, daemon=True, name="pytest-exit-guard").start()      # СПЕРШУ страховка: зламаний пул може заблокувати й сам kill_all_pools
-    try:
-        from benvid import video
-        video.kill_all_pools()
-    except Exception:  # noqa: BLE001
-        pass
+    def _kill():
+        try:
+            from benvid import video
+            video.kill_all_pools()
+        except Exception:  # noqa: BLE001
+            pass
+    threading.Thread(target=_kill, daemon=True, name="pytest-kill-pools").start()      # в потоці: зламаний пул не повинен блокувати друк підсумку pytest
