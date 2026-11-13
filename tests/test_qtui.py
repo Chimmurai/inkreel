@@ -144,13 +144,14 @@ def test_window_palette_language_and_level_controls(qapp, win):
     assert palette.INV in THEME.key or THEME.key.endswith(palette.INV)
     win._toggle_inv()
     win._set_level(4)
-    assert win.params.method == 4 and win.qbar.level == 4
+    assert win.params.method == 4 and win.m_slider.v == 4
     win._set_glyph(True)
-    assert win.params.glyph and win.btn_sym.isOn()
+    assert win.params.glyph and win.btn_sym.on and win.dens_box.isVisibleTo(win) and not win.m_slider.branch_on
+    win._set_glyph(False)
     win._set_lang("en")
-    assert i18n.lang() == "en" and win.btn_open.text() == "Open"
+    assert i18n.lang() == "en" and win.btn_open.text == "Open"
     win._set_lang("uk")
-    assert win.btn_open.text() == "Відкрити"
+    assert win.btn_open.text == "Відкрити"
 
 
 def test_window_opens_a_picture_and_shows_the_real_engine_output(qapp, win, tmp_path):
@@ -176,8 +177,8 @@ def test_window_exports_a_photo_a_gif_and_a_video_with_progress(qapp, win, tmp_p
     out = tmp_path / "out.png"
     monkeypatch.setattr(W.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(out), "")))
     win._export()
-    assert spin(qapp, lambda: not win.export.running and out.exists(), timeout=60), win.prog_lbl.text()
-    assert "Готово" in win.prog_lbl.text() and win.btn_export.isEnabled() and not win.btn_stop.isEnabled()
+    assert spin(qapp, lambda: not win.export.running and out.exists() and "Готово" in win.prog_lbl.text_, timeout=60), win.prog_lbl.text_
+    assert "Готово" in win.prog_lbl.text_ and win.btn_export.enabled and not win.btn_stop.enabled
     assert Image.open(out).size[0] > 10
 
     sys_path = os.path.dirname(__file__)
@@ -193,16 +194,16 @@ def test_window_exports_a_photo_a_gif_and_a_video_with_progress(qapp, win, tmp_p
     seen = []
     win.export.progress.connect(lambda f, *a: seen.append(f))
     win._export()
-    assert win.export.running and not win.btn_export.isEnabled() and win.btn_stop.isEnabled()
-    assert spin(qapp, lambda: not win.export.running, timeout=120), win.prog_lbl.text()
-    assert out2.exists() and out2.stat().st_size > 1000 and "Готово" in win.prog_lbl.text()
+    assert win.export.running and not win.btn_export.enabled and win.btn_stop.enabled
+    assert spin(qapp, lambda: not win.export.running and "Готово" in win.prog_lbl.text_, timeout=120), win.prog_lbl.text_
+    assert out2.exists() and out2.stat().st_size > 1000 and "Готово" in win.prog_lbl.text_
     assert seen and max(seen) > 0.5 and win.prog.f == 1.0
 
     win._export()                                    # скасування: стоп під час роботи
     assert spin(qapp, lambda: win.export.running, timeout=5)
     win.export.stop()
     assert spin(qapp, lambda: not win.export.running, timeout=60)
-    assert win.btn_export.isEnabled()
+    assert win.btn_export.enabled
 
 
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):

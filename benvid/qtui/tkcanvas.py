@@ -110,6 +110,13 @@ class TkCanvas(QWidget):
     def winfo_height(self):
         return self.height()
 
+    def place(self, x=0, y=0, width=None, height=None):
+        self.setGeometry(int(x), int(y), int(width if width is not None else self.width()), int(height if height is not None else self.height()))
+        self.show()
+
+    def place_forget(self):
+        self.hide()
+
     # ----------------------------------------------------------------------- малювання
     @staticmethod
     def _pen(color, width=1, dash=None, offset=0, phase=0.0):
@@ -131,11 +138,15 @@ class TkCanvas(QWidget):
         from .theme import tk_font
         return tk_font(spec)
 
+    def _text_lines(self, it):
+        from .labels import wrap_text
+        fm = QFontMetrics(self._font(it.opt["font"]))
+        wd = int(it.opt.get("width") or 0)
+        return (wrap_text(it.opt["text"], wd, fm) if wd else str(it.opt["text"]).split("\n")), fm
+
     def _text_rect(self, it) -> QRectF:
         o = it.opt
-        f = self._font(o["font"])
-        fm = QFontMetrics(f)
-        lines = str(o["text"]).split("\n")
+        lines, fm = self._text_lines(it)
         w = max((fm.horizontalAdvance(s) for s in lines), default=0)
         h = fm.height() * len(lines)
         fx, fy = _ANCHOR.get(o["anchor"], (.5, .5))
@@ -248,7 +259,11 @@ class TkCanvas(QWidget):
         r = self._text_rect(it)
         p.setPen(c)
         p.setFont(self._font(o["font"]))
-        p.drawText(r, Qt.AlignLeft | Qt.AlignTop | Qt.TextDontClip, str(o["text"]))
+        lines, fm = self._text_lines(it)
+        for k, s in enumerate(lines):
+            lw = fm.horizontalAdvance(s)
+            x = r.left() + ((r.width() - lw) // 2 if o["justify"] == "center" else (r.width() - lw) if o["justify"] == "right" else 0)
+            p.drawText(QRectF(x, r.top() + k * fm.height(), lw + 2, fm.height()), Qt.AlignLeft | Qt.AlignTop | Qt.TextDontClip, s)
 
     def _draw_image(self, p, it):
         img = it.opt["image"]

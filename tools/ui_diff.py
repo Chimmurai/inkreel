@@ -246,8 +246,71 @@ def grab_qt_widgets(cases, size):
     return arr
 
 
+def _isolated_settings(ui):
+    import json
+    import tempfile
+    from benvid import engine
+    tmp = tempfile.mkdtemp()
+    engine.SETTINGS_FILE = os.path.join(tmp, "settings.json")
+    engine._OLD = os.path.join(tmp, "old.json")
+    with open(engine.SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"ui": ui}, f)
+
+
+def grab_screen_tk(w, h, ui, media=None, wait=6.0):
+    import tkinter  # noqa: F401
+    from PIL import ImageGrab
+    _isolated_settings(ui)
+    import random
+    random.seed(7)                                       # однакова «Порада» на порожньому екрані з обох боків
+    from benvid import guide
+    guide.tip = lambda n=-1: 3
+    from benvid import gui
+    app = gui.App(media) if media else gui.App()
+    app.geometry(f"{w}x{h}+30+30")
+    app.attributes("-topmost", True)
+    end = time.time() + wait
+    while time.time() < end:
+        app.update()
+        time.sleep(0.02)
+    x, y = app.winfo_rootx(), app.winfo_rooty()
+    img = np.asarray(ImageGrab.grab(bbox=(x, y, x + app.winfo_width(), y + app.winfo_height())).convert("RGB"))
+    app.destroy()
+    return img
+
+
+def grab_screen_qt(w, h, ui, media=None, wait=6.0):
+    from PySide6.QtGui import QImage
+    from PySide6.QtWidgets import QApplication
+    _isolated_settings(ui)
+    import random
+    random.seed(7)
+    from benvid import guide
+    guide.tip = lambda n=-1: 3
+    app = QApplication.instance() or QApplication([])
+    from benvid.qtui.window import MainWindow
+    win = MainWindow(media)
+    win.resize(w, h)
+    win.show()
+    end = time.time() + wait
+    while time.time() < end:
+        app.processEvents()
+        time.sleep(0.01)
+    im = win.centralWidget().grab().toImage().convertToFormat(QImage.Format_RGB888)
+    arr = np.frombuffer(im.constBits(), np.uint8).reshape(im.height(), im.bytesPerLine())[:, :im.width() * 3].reshape(im.height(), im.width(), 3).copy()
+    win.close()
+    return arr
+
+
 def main(argv):
     what = argv[1] if len(argv) > 1 else "primitives"
+    if what == "screen":
+        ui = {"lang": "uk", "palette": "Класика", "size": "Авто", "method": 4}
+        w, h = 1280, 860
+        tk_img = grab_screen_tk(w, h, ui)
+        qt_img = grab_screen_qt(w, h, ui)
+        ok = compare("screen", tk_img, qt_img, threshold=0)
+        return 0 if ok else 1
     if what == "primitives":
         w, h = 180, 124
         ok = compare("primitives", grab_tk(w, h, sheet), grab_qt(w, h, sheet))

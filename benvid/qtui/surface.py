@@ -59,6 +59,8 @@ class FrameSurface(QWidget):
         self._pos = (0, 0)
         self._shown = 0
         self._drag = None
+        self._empty = None
+        self._tip_n = -1
         self.stats = dict(frames=0, compose_ms=0.0, paint_ms=0.0)
         self.composed.connect(self._on_composed)
         self.setCursor(Qt.ArrowCursor)
@@ -72,6 +74,7 @@ class FrameSurface(QWidget):
         self.mask = mask
         if mask is None:
             self._img = None
+            self.rebuild_empty()
             self.update()
         else:
             self.refresh()
@@ -106,17 +109,43 @@ class FrameSurface(QWidget):
             arr, x, y = comp
             self._img, self._pos = to_qimage(arr), (x, y)
             self.stats["compose_ms"] += ms
+            if self._empty is not None:
+                self._empty.hide()
             self.update()
         if self._pending:
             self._pending = False
             self.refresh()
 
     def _theme_changed(self):
+        self.rebuild_empty()
         self.update()
+
+    def rebuild_empty(self):
+        """порожній екран (файл не відкрито) - три написи точно як у Tk-версії: прохання відкрити файл, філософія, випадкова порада"""
+        from .. import guide
+        from ..i18n import tr as _tr
+        from .consts import FONT_B, FONT_S
+        from .tkcanvas import TkCanvas
+        if self._empty is None:
+            self._empty = TkCanvas(self)
+            self._empty.setGeometry(0, 0, self.width(), self.height())
+            self._tip_n = guide.tip(-1)
+        c = self._empty
+        c.bg = THEME.bg.name()
+        c.delete("all")
+        cw, ch = self.width(), self.height()
+        wrap = max(160, min(cw - 40, 620))
+        c.create_text(cw // 2, ch // 2 - 36, text=_tr("Відкрий відео, GIF або фото\nабо просто перетягни файл у це вікно"), fill=THEME.fg.name(), font=FONT_B, justify="center", width=wrap)
+        c.create_text(cw // 2, ch // 2 + 44, text=guide.philosophy(), fill=THEME.dim.name(), font=FONT_S, justify="center", width=min(wrap, 460))
+        c.create_text(cw // 2, ch // 2 + 104, text=guide.tip_text(self._tip_n), fill=THEME.dim.name(), font=FONT_S, justify="center", width=min(wrap, 460))
+        c.setGeometry(0, 0, cw, ch)
+        c.setVisible(self._img is None)
+        c.update()
 
     # --------------------------------------------------------------------------------- події
     def resizeEvent(self, e):
         self._gen += 1
+        self.rebuild_empty()
         self.refresh()
 
     def wheelEvent(self, e):
@@ -175,11 +204,7 @@ class FrameSurface(QWidget):
         p = QPainter(self)
         p.fillRect(self.rect(), THEME.bg)
         if self._img is None or self.mask is None:
-            p.setPen(THEME.fg)
-            p.setFont(font(theme.BIG, True))
-            r = QRectF(self.rect()).adjusted(20, 0, -20, 0)
-            p.drawText(r.translated(0, -36), Qt.AlignCenter | Qt.TextWordWrap, tr("Відкрий відео, GIF або фото\nабо просто перетягни файл у це вікно"))
-            return
+            return                                    # порожній екран малює дочірнє полотно _empty (див. rebuild_empty)
         x, y = self._pos
         p.drawImage(x, y, self._img)
         if x > 0 or y > 0:                         # картинка менша за поле: рамка з проміжком 2 px, як у Tk (інакше край зливається з тлом)
