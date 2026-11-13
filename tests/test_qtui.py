@@ -1010,6 +1010,28 @@ def test_hud_is_painted_over_the_picture_and_the_empty_screen(qapp, win):
     assert clean != marked and s.hud_phase == 3
 
 
+def test_file_from_the_command_line_opens_and_a_long_name_is_shortened_keeping_the_extension(qapp, win, tmp_path):
+    from PIL import Image
+    from benvid.qtui.window import MainWindow
+    name = "дуже-довга-назва-файлу-" * 6 + ".png"
+    p = tmp_path / name
+    Image.fromarray((np.random.RandomState(12).rand(30, 40) * 255).astype(np.uint8)).save(p)
+    w = MainWindow(str(p))
+    try:
+        w.resize(1500, 800)
+        w.show()
+        assert spin(qapp, lambda: w.ready, timeout=30), "файл з аргумента командного рядка відкрито"
+        spin(qapp, lambda: False, timeout=0.4)
+        w._fit_title()
+        t = w.title_lbl.text_
+        assert w._name == name and t.endswith(".png") and "…" in t and len(t) < len(name) and not w.title_lbl.dim
+    finally:
+        w.ready = False
+        w.close()
+    win._fit_title()
+    assert win.title_lbl.dim and "файл не відкрито" in win.title_lbl.text_
+
+
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     seeks = []
     monkeypatch.setattr(win.player, "seek", lambda f: seeks.append(int(f)))

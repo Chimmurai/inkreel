@@ -37,6 +37,34 @@ class ShellMixin:
         self.setMinimumSize(min(1000, sw - 40), min(640, sh - 90))
         self.resize(min(1280, sw - 40), min(860, sh - 90))
 
+    def _start_services(self):
+        """лише справжній запуск (не тести): точний таймер Windows, рідші паузи збирача сміття, перевірка відеокарти у фоні, прогрів плеєра - як у Tk-версії"""
+        try:
+            from .. import procs
+            procs.fine_timer()
+            import gc
+            gc.set_threshold(50000, 20, 20)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from .. import gpu
+            probe = threading.Timer(3.0, gpu.start_probe_background)      # перевірка відеокарти - у фоні, окремим процесом
+            probe.daemon = True                                          # не-фоновий потік, що завис у драйвері, тримав би процес живим після закриття вікна
+            probe.start()
+        except Exception:  # noqa: BLE001
+            pass
+        QTimer.singleShot(300, self.player.warm)
+        try:
+            win = self.windowHandle()
+            if win is not None:
+                win.screenChanged.connect(self._screen_changed)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _screen_changed(self, *_):
+        """вікно перейшло на інший монітор (інший масштаб/DPI): перерахувати розкладку й перемалювати картинку"""
+        QTimer.singleShot(50, lambda: (self._relayout(), self.surface.refresh(), self.update()))
+
     # ------------------------------------------------------------------ «кіно», F11, права панель
     def toggle_cinema(self):
         self._fullscreen()

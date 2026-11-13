@@ -67,6 +67,25 @@ class StatusMixin:
                 pass
         return segs
 
+    def _fit_title(self):
+        """ім'я відкритого файлу в шапці займає лише вільне місце між кнопками й «?»: що не влізло - скорочується в кінці імені, розширення лишається
+        («дуже-довга-наз….mp4»), тож шапка не розпирає й нічого не налізає одне на одне"""
+        import os
+        lbl = self.title_lbl
+        fm = QFontMetrics(tk_font(lbl.font_))
+        full = self._name if self.ready else tr("— файл не відкрито —")
+        room = lbl.width() - 4 - 2 * (lbl.bd + lbl.padx)
+        txt = full
+        if room > 24 and fm.horizontalAdvance(full) > room:
+            base, ext = os.path.splitext(full)
+            while base and fm.horizontalAdvance(base + "…" + ext) > room:
+                base = base[:-1]
+            txt = base + "…" + ext
+        lbl.dim = not self.ready
+        if lbl.text_ != txt:
+            lbl.config(text=txt)
+        lbl.update()
+
     # ------------------------------------------------------------------ HUD
     def _hud_info(self):
         """-> (текст, чи крутиться лічильник) або None, коли все спокійно (іде відтворення чи стоїть готовий кадр). Будь-яке очікування -
@@ -132,6 +151,7 @@ class StatusMixin:
                 if rq != self._lay_req:
                     self._lay_req = rq
                     self._relayout()
+                self._fit_title()
             if now - self._hud_t > 0.1:
                 self._hud_t = now
                 self._hud_update()

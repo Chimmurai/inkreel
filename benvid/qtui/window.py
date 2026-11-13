@@ -509,7 +509,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, Stat
         if self._exp_msg[0]:
             self.prog_lbl.config(text=tr(self._exp_msg[0], **self._exp_msg[1]))
         self.pal_lbl.config(text=tr(self.pal_name))
-        self.title_lbl.config(text=self._name if self.ready else tr("— файл не відкрито —"))
+        self._fit_title()
         self.setWindowTitle(self.TITLE + (f" — {self._name}" if self.ready else ""))
 
     def _formats(self) -> dict:
@@ -868,6 +868,7 @@ def main(argv=None) -> int:
     if lst:
         lst.start(lambda p: w.deliver(p))
     w.show()
+    w._start_services()
     try:
         return app.exec()
     finally:
