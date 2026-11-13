@@ -153,13 +153,17 @@ class TkCanvas(QWidget):
         x, y = it.coords
         return QRectF(round(x) - int(fx * w), round(y) - int(fy * h), w, h)      # Tk центрує цілочисельно (ширина/2 з відкиданням дробу)
 
+    def draw_items(self, p):
+        """намалювати елементи на чужому QPainter (напис поверх картинки, без власного тла)"""
+        for it in self._items:
+            getattr(self, "_draw_" + it.kind)(p, it)
+
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, False)
         p.setRenderHint(QPainter.TextAntialiasing, True)
         p.fillRect(self.rect(), QColor(self.bg))
-        for it in self._items:
-            getattr(self, "_draw_" + it.kind)(p, it)
+        self.draw_items(p)
 
     def _draw_rect(self, p, it):
         x0, y0, x1, y1 = it.coords

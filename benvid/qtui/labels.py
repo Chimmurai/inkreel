@@ -154,6 +154,7 @@ class TkImage(QWidget):
         super().__init__(parent)
         self.name, self.scale = name, scale
         self.clicked = None
+        self._shown = None
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         THEME.changed.connect(self._retheme)
@@ -168,6 +169,11 @@ class TkImage(QWidget):
         self.setFixedSize(*sz)
         self.update()
 
+    def show_image(self, im):
+        """показати іншу картинку того ж розміру (кадр анімації); None - назад до звичайної"""
+        self._shown = im
+        self.update()
+
     def mousePressEvent(self, e):
         if self.clicked and e.button() == Qt.LeftButton:
             self.clicked()
@@ -175,8 +181,9 @@ class TkImage(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         p.fillRect(self.rect(), THEME.bg)
-        if self.im is not None:
-            p.drawImage(0, 0, self.im)
+        im = self._shown or self.im
+        if im is not None:
+            p.drawImage((self.width() - im.width()) // 2, (self.height() - im.height()) // 2, im)
 
 
 class TkStrip(QWidget):

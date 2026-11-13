@@ -260,6 +260,119 @@ def test_label_wrap_counts_the_space_after_a_word_like_tk(qapp):
     assert wrap_text("aaaa bbbb", w, fm) == ["aaaa bbbb"], "останнє слово абзацу пробілу не має"
 
 
+def test_tips_show_after_a_delay_one_at_a_time_and_vanish_on_leave(qapp, win, monkeypatch):
+    from PySide6.QtCore import QEvent
+    from benvid.qtui.tips import Tip
+    monkeypatch.setattr(Tip, "DELAY", 30)
+    a, b = win.btn_open, win.btn_export
+    state = {"n": 0}
+
+    def text():
+        state["n"] += 1
+        return "підказка №%d" % state["n"]
+    Tip(win.btn_ua, text)
+    QApplication.sendEvent(win.btn_ua, QEvent(QEvent.Enter))
+    assert Tip._cur is None, "підказка не одразу"
+    assert spin(qapp, lambda: Tip._cur is not None, timeout=3)
+    t1 = Tip._cur
+    assert t1._win.isVisible() and t1._win.lines == ["підказка №1"]
+    QApplication.sendEvent(win.btn_open, QEvent(QEvent.Enter))
+    assert spin(qapp, lambda: Tip._cur is not None and Tip._cur is not t1, timeout=3), "перейшли на іншу кнопку - підказка тепер її"
+    assert t1._win is None, "стара прибрана"
+    QApplication.sendEvent(win.btn_open, QEvent(QEvent.Leave))
+    assert Tip._cur is None
+    Tip.hide_all()
+
+
+def test_every_tip_text_is_translated_and_every_widget_exists(qapp, win):
+    from benvid.qtui import eggs_ui
+    i18n.set_lang("en")
+    try:
+        for attr, key in eggs_ui.TIPS.items():
+            assert getattr(win, attr, None) is not None, attr
+            if attr in ("btn_ua", "btn_en"):             # назви мов однакові в обох мовах
+                continue
+            assert i18n.tr(key) != key, "нема англійського тексту підказки: " + key
+        for key in (*eggs_ui.SIZE_TIPS.values(), eggs_ui.LOCK_TIP_ON, eggs_ui.LOCK_TIP_OFF, *eggs_ui.PLAY_TIPS, *eggs_ui.DONATE_TIPS):
+            assert i18n.tr(key) != key, key
+    finally:
+        i18n.set_lang("uk")
+
+
+def test_logo_x5_defocuses_the_picture_with_a_caption_then_restores_sharpness(qapp, win):
+    import benvid.eggs as eggs
+    mask = (np.random.RandomState(3).rand(90, 160) > 0.5).astype(np.uint8)
+    win.surface.set_mask(mask)
+    assert spin(qapp, lambda: win.surface._img is not None)
+    sharp = win.surface.grab().toImage()
+    for _ in range(5):
+        win.lbl_logo.clicked()
+    assert win._egg_t0 is not None
+    assert spin(qapp, lambda: win.surface.defocus > 0.05, timeout=5), "розфокус наростає"
+    win._egg_t0 -= 2.0                                   # мить, коли підпис уже проявився
+    win.surface.egg_t0 = win._egg_t0
+    win.surface.update()
+    blurred = win.surface.grab().toImage()
+    assert blurred != sharp
+    win._egg_t0 = time.perf_counter() - eggs.DEFOCUS_TOTAL - 1
+    win._egg_tick()
+    assert win.surface.defocus == 0.0 and win.surface.egg_t0 is None and win._egg_t0 is None
+
+
+def test_logo_x5_without_a_picture_spins_the_reel_with_a_phrase_and_the_bubble_goes_away(qapp, win):
+    import benvid.eggs as eggs
+    for _ in range(5):
+        win.lbl_logo.clicked()
+    assert win._bub is not None and win._bub.isVisible() and win._last_quote >= 0
+    assert spin(qapp, lambda: win._spin_i is None and win.lbl_mascot._shown is None and not win._spin_job.isActive(), timeout=5), "оберт скінчився"
+    win._bubble_close()
+    assert win._bub is None
+    assert len(eggs.spin_angles()) > 2
+
+
+def test_swatch_x7_runs_the_palette_party_and_returns_to_the_users_palette(qapp, win):
+    win._step_palette(1)
+    mine = win.pal_name
+    seen = set()
+    win.pal_lbl.config  # (підпис палітри оновлюється разом з нею)
+    for _ in range(7):
+        win._swatch_click()
+    assert win._party_seq is not None
+    end = time.time() + 20
+    while time.time() < end and win._party_seq is not None:
+        qapp.processEvents()
+        seen.add(win.pal_name)
+        time.sleep(0.01)
+    assert win._party_seq is None and len(seen) > 5, "перебрала кілька палітр"
+    assert spin(qapp, lambda: win.pal_name == mine, timeout=3)
+
+
+def test_closing_in_the_middle_of_the_party_keeps_the_users_palette(qapp, win):
+    mine = win.pal_name
+    for _ in range(7):
+        win._swatch_click()
+    assert spin(qapp, lambda: win.pal_name != mine, timeout=3)
+    win._party_stop()
+    assert win.pal_name == mine and win._party_seq is None
+
+
+def test_cookie_is_bitten_then_eaten_into_crumbs_then_rebaked(qapp, win):
+    import benvid.eggs as eggs
+    b = win.btn_donate
+    if b is None:
+        pytest.skip("у цій збірці кнопки донату нема")
+    b.set_enabled(False)
+    for k in range(eggs.COOKIE_CLICKS - 1):
+        win._cookie_click()
+        assert b.bites == k + 1 and not b.crumbs
+    win._cookie_click()
+    assert b.bites == eggs.EATEN and b.crumbs and win._bub is not None
+    assert spin(qapp, lambda: not b.crumbs or b.bites == 0, timeout=5)
+    win._cookie_rebake()
+    assert b.bites == 0 and b.crumbs == []
+    b.set_enabled(bool(__import__("benvid").meta.DONATE))
+
+
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     seeks = []
     monkeypatch.setattr(win.player, "seek", lambda f: seeks.append(int(f)))

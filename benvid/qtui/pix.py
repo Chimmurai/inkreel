@@ -68,6 +68,7 @@ class PixButton(_Base):
         self.text, self.cmd, self.on, self.enabled, self.toggle = text, command, False, True, toggle
         self.im, self._bw, self._bh, self.hover, self.icon, self.join = image, w, height, False, icon, join
         self.bites, self.crumbs = 0, []
+        self.on_press = None
         self._pressed = False
         self._want = (w, height)
         self.setCursor(Qt.PointingHandCursor)
@@ -117,6 +118,8 @@ class PixButton(_Base):
         self.update()
 
     def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton and self.on_press:
+            self.on_press()                              # як bind("<Button-1>", add="+") у Tk: спрацьовує й на вимкненій кнопці (пасхалка «печиво»)
         if e.button() == Qt.LeftButton and self.enabled:
             self._pressed = True
             self.draw()

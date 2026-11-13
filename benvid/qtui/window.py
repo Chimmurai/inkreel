@@ -24,6 +24,7 @@ from ..video import FORMATS, QUALITY, SIZES, VIDEO_EXT, out_size
 from . import assets
 from .boxes import PixCombo, PixEntry, SectionBox
 from .consts import (AUTO, BAR_H, EDGE_W, FONT, FONT_B, FONT_S, G, GG, H_L, H_M, H_S, HEAD_W, M, MIN_MAIN, SB_W, SIDE_W, TOG_W, W_SQ)
+from .eggs_ui import EggsMixin
 from .export import ExportController
 from .footer import FooterMixin
 from .labels import TkImage, TkLabel, TkStrip
@@ -56,7 +57,7 @@ def _fixed(b: PixButton, w: int) -> PixButton:
     return b
 
 
-class MainWindow(FooterMixin, QMainWindow):
+class MainWindow(EggsMixin, FooterMixin, QMainWindow):
     TITLE = "InkReel"
     SEEK_GAP = 0.04
 
@@ -240,6 +241,9 @@ class MainWindow(FooterMixin, QMainWindow):
         bl.addWidget(row)
         main.addWidget(bot)
         self._build_footer()
+        self._last_out, self._prog_done = "", False
+        self._init_eggs()
+        self._install_tips()
 
     def _section(self, parent_lay, last=False):
         s = SectionBox("", None, last=last)
@@ -658,6 +662,7 @@ class MainWindow(FooterMixin, QMainWindow):
         for b in (self.btn_export, self.btn_export2, self.btn_open):
             b.set_enabled(False)
         self.btn_stop.set_enabled(True)
+        self._prog_done = False
         self._say("Обробка…")
         self.export.start(kind=kind, path=self.path, out=out, params=self.params, fmt=fmt, size_key=size_key, quality=self.q_cb.currentData() or "Висока",
                           pal_name=self._pal_key(), audio=self.btn_aud.on, cache=cache, src_fps=pl.fps or 24.0, n_frames=pl.n)
@@ -692,6 +697,9 @@ class MainWindow(FooterMixin, QMainWindow):
         for b in (self.btn_export, self.btn_export2, self.btn_open):
             b.set_enabled(True)
         self.btn_stop.set_enabled(False)
+        self._prog_done = bool(ok)
+        if ok:
+            self._spin_reel()                            # готово: котушка робить оберт
 
     # ------------------------------------------------------------------------------ такт
     def _tick(self):
@@ -762,6 +770,8 @@ class MainWindow(FooterMixin, QMainWindow):
         super().resizeEvent(e)
 
     def closeEvent(self, e):
+        self._party_stop()
+        self._bubble_close()
         self.export.stop()
         self.export.join(3.0)
         self._save()
@@ -779,6 +789,11 @@ class PaletteSwatch(QWidget):
         super().__init__(parent)
         self.setFixedSize(30, 18)
         THEME.changed.connect(self.update)
+
+    def mousePressEvent(self, e):
+        w = self.window()
+        if e.button() == Qt.LeftButton and hasattr(w, "_swatch_click"):
+            w._swatch_click()
 
     def paintEvent(self, e):
         from PySide6.QtGui import QColor, QPainter

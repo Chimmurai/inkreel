@@ -12,7 +12,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
-from .. import palette, view
+from .. import eggs, palette, view
 from ..i18n import tr
 from . import theme
 from .theme import THEME, font
@@ -61,6 +61,7 @@ class FrameSurface(QWidget):
         self._drag = None
         self._empty = None
         self._tip_n = -1
+        self.defocus, self.egg_t0, self._cap = 0.0, None, None
         self.stats = dict(frames=0, compose_ms=0.0, paint_ms=0.0)
         self.composed.connect(self._on_composed)
         self.setCursor(Qt.ArrowCursor)
@@ -69,6 +70,12 @@ class FrameSurface(QWidget):
     def set_palette(self, key: str):
         self.lut = lut_for(key)
         self.refresh()
+
+    def set_defocus(self, level: float, t0):
+        """пасхалка «розфокус»: рівень розмиття маски й час початку (для підпису; None - пасхалка скінчилась)"""
+        self.defocus, self.egg_t0 = level, t0
+        self.refresh()
+        self.update()
 
     def set_mask(self, mask: np.ndarray | None):
         self.mask = mask
@@ -92,10 +99,12 @@ class FrameSurface(QWidget):
             return
         self._busy = True
         mask, lut, cw, ch, zoom, vc, gen = self.mask, self.lut, self.width(), self.height(), self.zoom, self.vc, self._gen
+        lvl = self.defocus
 
         def work():
             t0 = time.perf_counter()
-            comp = view.compose(mask, lut, cw, ch, zoom, vc)
+            m = eggs.defocus(mask, lvl) if lvl > 0.004 else mask             # пасхалка: 0/1-маска стає плавними відтінками
+            comp = view.compose(m, lut, cw, ch, zoom, vc)
             if comp is not None:
                 img, k, x, y, crop = comp
                 comp = (view.finish(img, k, crop), x, y)
@@ -221,5 +230,38 @@ class FrameSurface(QWidget):
             p.setPen(QPen(THEME.fg, 1))
             p.drawRect(r.adjusted(0.5, 0.5, -0.5, -0.5))
             p.drawText(r, Qt.AlignCenter, txt)
+        if self.egg_t0 is not None:
+            self._draw_caption(p, self.width(), self.height())
         self.stats["frames"] += 1
         self.stats["paint_ms"] += (time.perf_counter() - t0) * 1000
+
+    def _draw_caption(self, p, cw, ch):
+        """підпис, поки картинка розфокусована: два рядки філософії проявляються в рамці внизу екрана (рамка з'являється, коли перший рядок
+        уже читається; напівпрозорості нема, тож проявляємо колір тексту від тла до кольору) - як App._draw_caption"""
+        import textwrap
+
+        from PySide6.QtGui import QFontMetrics
+
+        from .consts import FONT_B
+        from .theme import tk_font
+        from .tkcanvas import TkCanvas
+        a1, a2 = eggs.caption_alphas(time.perf_counter() - self.egg_t0)
+        if max(a1, a2) < 0.25:
+            return
+        l1, l2 = eggs.philosophy_parts()
+        per = max(16, max(200, min(cw - 80, 660)) // max(1, QFontMetrics(tk_font(FONT_B)).horizontalAdvance("0")))   # символів у рядку (шрифт моноширинний)
+        wrapped = lambda s: "\n".join(textwrap.wrap(s, per)) if s else ""
+        bg, fg = THEME.bg.name(), THEME.fg.name()
+        shade = lambda a: eggs.blend_hex(bg, fg, (a - 0.25) / 0.75)
+        if self._cap is None:
+            self._cap = TkCanvas(self)
+            self._cap.hide()
+        c = self._cap
+        c.delete("all")
+        t2 = c.create_text(cw // 2, ch - 34, text=wrapped(l2), anchor="s", justify="center", font=FONT_B, fill=shade(a2))
+        b2 = c.bbox(t2)
+        t1 = c.create_text(cw // 2, b2[1] - 10, text=wrapped(l1), anchor="s", justify="center", font=FONT_B, fill=shade(a1))
+        b1 = c.bbox(t1)
+        r = c.create_rectangle(min(b1[0], b2[0]) - 16, b1[1] - 12, max(b1[2], b2[2]) + 16, b2[3] + 12, fill=bg, outline=fg)
+        c.tag_lower(r, t2)
+        c.draw_items(p)
