@@ -129,6 +129,11 @@ def win(qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(engine, "SETTINGS_FILE", str(tmp_path / "settings.json"))
     monkeypatch.setattr(engine, "_OLD", str(tmp_path / "old.json"))
     (tmp_path / "settings.json").write_text(json.dumps({"ui": {"lang": "uk", "palette": "Класика", "size": "240p", "method": 2}}), encoding="utf-8")
+    from benvid import player as _pl, video as _vd
+    from benvid.qtui import export as _ex
+    for mod in (_vd, _pl, _ex):                          # у тестах пул малий: п'ятнадцять обробників по ~230 МБ вичерпують файл підкачки, коли диск майже повний
+        if hasattr(mod, "default_workers"):
+            monkeypatch.setattr(mod, "default_workers", lambda: 3)
     from benvid.qtui.window import MainWindow
     w = MainWindow()
     w.resize(1300, 800)
@@ -766,6 +771,245 @@ def test_failed_open_shows_the_error_and_leaves_the_window_unchanged(qapp, win, 
     assert shown and not win.ready
 
 
+def test_save_frame_writes_png_bmp_tiff_webp_and_txt_for_glyphs(qapp, vwin, tmp_path, monkeypatch):
+    from PIL import Image
+    from benvid.qtui import filectl
+    w = vwin
+    assert spin(qapp, lambda: w.surface.mask is not None, timeout=60)
+    w.player.pause()
+    got = {}
+    for ext, flt in ((".png", "PNG (*.png)"), (".bmp", "BMP (*.bmp)"), (".tif", "TIFF (*.tif)"), (".webp", "WebP (*.webp)")):
+        out = tmp_path / ("frame" + ext)
+        monkeypatch.setattr(filectl.QFileDialog, "getSaveFileName", staticmethod(lambda *a, o=str(out), f=flt, **k: (o, f)))
+        w._save_frame()
+        assert out.exists() and Image.open(out).size[0] > 10, ext
+        assert "Кадр збережено" in w.prog_lbl.text_ and w._last_out == str(out) and w._prog_done
+    noext = tmp_path / "noext"
+    monkeypatch.setattr(filectl.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(noext), "BMP (*.bmp)")))
+    w._save_frame()
+    assert (tmp_path / "noext.bmp").exists(), "без розширення - за вибраним типом"
+    monkeypatch.setattr(w, "_reparam", lambda: None)
+    w._set_glyph(True)
+    txt = tmp_path / "frame.txt"
+    seen = {}
+    monkeypatch.setattr(filectl.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (seen.setdefault("filter", a[3]), str(txt), "")[1:]))
+    w._save_frame()
+    assert "txt" in seen["filter"].lower() and txt.exists() and txt.read_text(encoding="utf-8").strip(), "у «Символах» кадр можна зберегти текстом"
+    monkeypatch.setattr(filectl.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: ("", "")))
+    w._say()
+    w._save_frame()
+    assert w.prog_lbl.text_ == "", "скасований діалог нічого не пише"
+
+
+def test_save_frame_does_nothing_without_a_picture(qapp, win, monkeypatch):
+    from benvid.qtui import filectl
+    called = []
+    monkeypatch.setattr(filectl.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: called.append(1) or ("", "")))
+    win._save_frame()
+    assert not called
+
+
+def test_cinema_f11_edge_escape_and_the_side_panel(qapp, win):
+    w = win
+    assert w.side.isVisibleTo(w) and not w.edge.isVisibleTo(w) and w.pstack.enabled
+    w.toggle_cinema()                                    # F, подвійний клік: лише картинка
+    assert w._fs and not w._wfs and w.isFullScreen() and not w.side.isVisibleTo(w) and not w.edge.isVisibleTo(w) and not w.pstack.enabled
+    w._on_escape()
+    assert not w._fs and not w.isFullScreen() and w.side.isVisibleTo(w) and w.pstack.enabled
+    w._window_fullscreen()                               # F11: усе вікно на весь екран, панель схована, справа «язичок»
+    assert w._wfs and w.isFullScreen() and not w.side.isVisibleTo(w) and w.edge.isVisibleTo(w) and w.edge.icon == "left" and w.pstack.enabled
+    w._toggle_side()
+    assert w.side.isVisibleTo(w) and w.edge.icon == "right"
+    w._toggle_side()
+    assert not w.side.isVisibleTo(w) and w.edge.icon == "left"
+    w.toggle_cinema()                                    # із F11 у «кіно» й назад
+    assert w._fs and w._wfs and not w.edge.isVisibleTo(w)
+    w._window_fullscreen()                               # F11 із «кіно» виходить повністю
+    assert not w._fs and not w._wfs and not w.isFullScreen() and w.side.isVisibleTo(w)
+    w._on_escape()                                       # Escape у звичайному вікні нічого не робить
+    assert not w.isFullScreen()
+
+
+def test_cinema_keys_and_double_click_on_the_picture(qapp, win):
+    w = win
+    QTest.keyClick(w, Qt.Key_F)
+    assert w._fs
+    QTest.keyClick(w, Qt.Key_Escape)
+    assert not w._fs
+    w.surface.mouseDoubleClickEvent(__import__("PySide6.QtGui", fromlist=["QMouseEvent"]).QMouseEvent(
+        __import__("PySide6.QtCore", fromlist=["QEvent"]).QEvent.MouseButtonDblClick, QPointF(10, 10), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    assert w._fs
+    w._on_escape()
+    w.pstack.tcur = 1
+    QTest.keyClick(w, Qt.Key_F)
+    assert not w._fs, "на екрані футера «кіно» клавішею F не вмикається"
+    w.pstack.tcur = 0
+
+
+def test_zoom_keys_plus_minus_zero_one_and_the_click_pauses_but_a_drag_does_not(qapp, win, monkeypatch):
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtCore import QEvent
+    w = win
+    s = w.surface
+    s.set_mask((np.random.RandomState(4).rand(90, 160) > 0.5).astype(np.uint8))
+    assert spin(qapp, lambda: s._img is not None)
+    assert s.zoom is None
+    QTest.keyClick(w, Qt.Key_Plus)
+    assert not w._typing(), "початковий фокус не в полі введення"
+    assert s.zoom is not None
+    z = s.zoom
+    QTest.keyClick(w, Qt.Key_Plus)
+    assert s.zoom > z
+    QTest.keyClick(w, Qt.Key_Minus)
+    assert s.zoom == z
+    QTest.keyClick(w, Qt.Key_1)
+    assert s.zoom == 1
+    QTest.keyClick(w, Qt.Key_0)
+    assert s.zoom is None
+    w.ent_w.setFocus()
+    QTest.keyClick(w.ent_w, Qt.Key_1)
+    assert s.zoom is None and w.ent_w.text().endswith("1"), "у полі вводу цифри - для поля"
+    w.ent_w.clearFocus()
+    toggles = []
+    monkeypatch.setattr(w, "_toggle", lambda: toggles.append(1))
+    s.clicked.disconnect()
+    s.clicked.connect(w._toggle)
+    mk = lambda t, x, y: QMouseEvent(t, QPointF(x, y), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    s.mousePressEvent(mk(QEvent.MouseButtonPress, 50, 50))
+    s.mouseReleaseEvent(mk(QEvent.MouseButtonRelease, 50, 50))
+    assert toggles == [1], "клік по картинці - пауза/відтворення"
+    s.zoom_step(1)
+    s.mousePressEvent(mk(QEvent.MouseButtonPress, 50, 50))
+    s.mouseMoveEvent(mk(QEvent.MouseMove, 80, 70))
+    s.mouseReleaseEvent(mk(QEvent.MouseButtonRelease, 80, 70))
+    assert toggles == [1], "перетягування не вважається кліком"
+
+
+def test_drop_opens_the_first_file_and_tells_about_folders_and_busy_export(qapp, win, tmp_path, monkeypatch):
+    from PIL import Image
+    p = tmp_path / "a.png"
+    q = tmp_path / "b.png"
+    for f in (p, q):
+        Image.fromarray((np.random.RandomState(8).rand(30, 40) * 255).astype(np.uint8)).save(f)
+    assert win.acceptDrops()
+    win._got_files([str(tmp_path)])
+    assert "а не теку" in win.prog_lbl.text_ and not win.ready
+    win.export.running = True
+    win._got_files([str(p)])
+    assert "Іде експорт" in win.prog_lbl.text_ and not win.ready
+    win.export.running = False
+    win._got_files([str(p), str(q)])
+    assert win.ready and win.path == str(p) and "Відкрито перший із 2" in win.prog_lbl.text_
+    from PySide6.QtCore import QMimeData, QUrl
+    md = QMimeData()
+    md.setUrls([QUrl.fromLocalFile(str(q))])
+    assert [os.path.normpath(x) for x in win._drop_paths(type("E", (), {"mimeData": lambda self: md})())] == [os.path.normpath(str(q))]
+
+
+def test_second_launch_hands_the_file_to_the_running_window(qapp, win, tmp_path):
+    from PIL import Image
+    import threading
+    p = tmp_path / "deliver.png"
+    Image.fromarray((np.random.RandomState(9).rand(30, 40) * 255).astype(np.uint8)).save(p)
+    res = {}
+    t = threading.Thread(target=lambda: res.setdefault("ok", win.deliver(str(p), wait=10)))
+    t.start()
+    assert spin(qapp, lambda: "ok" in res, timeout=15)
+    t.join(5)
+    assert res["ok"] is True and win.ready and win.path == str(p)
+
+
+def test_single_instance_listener_and_the_real_main_flow_helpers(qapp, win, tmp_path):
+    from benvid import single
+    port, magic = 47999, "TESTQT1"
+    lst = single.acquire("", port, magic)
+    assert lst not in (False, None)
+    got = []
+    lst.start(lambda p: (got.append(p), win.deliver(p, wait=5))[1])
+    from PIL import Image
+    p = tmp_path / "second.png"
+    Image.fromarray((np.random.RandomState(10).rand(30, 40) * 255).astype(np.uint8)).save(p)
+    res = {}
+    import threading
+    t = threading.Thread(target=lambda: res.setdefault("r", single.acquire(str(p), port, magic)))
+    t.start()
+    assert spin(qapp, lambda: "r" in res, timeout=15)
+    t.join(5)
+    lst.close()
+    assert res["r"] is False and got == [str(p)] and win.path == str(p), "другий запуск передав файл і сам вийшов"
+
+
+def test_window_has_icon_min_size_and_takes_the_installer_language(qapp, tmp_path, monkeypatch):
+    from benvid.qtui.window import MainWindow
+    from benvid import engine
+    monkeypatch.setattr(engine, "SETTINGS_FILE", str(tmp_path / "s.json"))
+    monkeypatch.setattr(engine, "_OLD", str(tmp_path / "o.json"))
+    (tmp_path / "s.json").write_text(json.dumps({"ui": {"lang": "uk"}}), encoding="utf-8")
+    monkeypatch.setattr(i18n, "install_lang", lambda: "en")
+    w = MainWindow()
+    try:
+        assert i18n.lang() == "en" and w.ui["install_lang"] == "en" and not w.windowIcon().isNull()
+        assert w.minimumWidth() >= 600 and w.minimumHeight() >= 400
+        w._set_lang("uk")
+        w._save()
+    finally:
+        w.close()
+    w2 = MainWindow()                                     # та сама установка: мову, яку вибрав користувач, не перезаписуємо
+    try:
+        assert i18n.lang() == "uk"
+    finally:
+        w2.close()
+        i18n.set_lang("uk")
+
+
+def test_hud_status_line_and_export_estimate_follow_the_state(qapp, vwin, monkeypatch):
+    w = vwin
+    assert spin(qapp, lambda: w.stat_lbl.text_ != "", timeout=60), "рядок стану заповнено"
+    assert "·" in w.stat_lbl.text_ or w.stat_lbl.text_
+    full = w._fit_status([(0, "aaaa"), (1, "bbbb"), (9, "cccc")], " · ")
+    assert "aaaa" in full and w._stat_full == "aaaa · bbbb · cccc"
+    w.stat_lbl.resize(60, 20)
+    short = w._fit_status([(0, "aaaa"), (1, "bbbb"), (9, "cccc")], " · ")
+    assert short == "aaaa" or short == "aaaa · bbbb" or short == "", short
+    assert w._stat_full == "aaaa · bbbb · cccc"
+    w.export.running = True
+    w.export.f = 0.5
+    w.export.total = 100
+    assert w._hud_info() == (tr_("РЕНДЕР · кадр {cur}/{tot}", cur=50, tot=100), True)
+    w.export.pause_ev.set()
+    assert w._hud_info() == (tr_("ПАУЗА · {pct:.0f}%", pct=50.0), False)
+    w.export.pause_ev.clear()
+    w.export.running = False
+    monkeypatch.setattr(type(w.player), "warming", property(lambda self: True))
+    info = w._hud_info()
+    assert info[0].startswith("ГОТУЮ ГРАВЮРУ…") and info[1] is True, "плашка прогріву «Гравюри»"
+    w.params.glyph = True
+    assert w._hud_info()[0].startswith("ГОТУЮ СИМВОЛИ…")
+    w.params.glyph = False
+    monkeypatch.setattr(type(w.player), "warming", property(lambda self: False))
+    w._estimate(w.player)
+    assert w.est_lbl.text_ == "" or "Експорт" in w.est_lbl.text_
+
+
+def tr_(key, **kw):
+    return i18n.tr(key, **kw)
+
+
+def test_hud_is_painted_over_the_picture_and_the_empty_screen(qapp, win):
+    s = win.surface
+    s.resize(640, 400)
+    s.set_hud(("ПАУЗА · 50%", False), 0)
+    img = s.grab().toImage()
+    assert any(img.pixelColor(x, y) != img.pixelColor(2, 2) for x in range(8, 140) for y in range(8, 40)), "HUD видно на порожньому екрані"
+    s.set_mask((np.random.RandomState(6).rand(90, 160) > 0.5).astype(np.uint8))
+    assert spin(qapp, lambda: s._img is not None)
+    s.set_hud(None, 0)
+    clean = s.grab().toImage()
+    s.set_hud(("РЕНДЕР · кадр 1/9", True), 3)
+    marked = s.grab().toImage()
+    assert clean != marked and s.hud_phase == 3
+
+
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     seeks = []
     monkeypatch.setattr(win.player, "seek", lambda f: seeks.append(int(f)))
@@ -780,3 +1024,4 @@ def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     win._on_seek_end(999.0)
     assert seeks[-1] == 999
     win.ready = False
+

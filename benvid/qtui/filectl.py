@@ -57,6 +57,38 @@ class FileMixin:
         except Exception:  # noqa: BLE001
             pass
 
+    # ------------------------------------------------------------------ кадр -> фото
+    def _save_frame(self):
+        """поточний кадр (відео/GIF) -> окреме 1-бітне фото (PNG, BMP, TIFF, WebP; у «Символах» ще .txt зі знаками)"""
+        mask = self.surface.mask
+        if mask is None or not self.ready:
+            return
+        from .. import glyph
+        from ..media import save_still, save_text
+        base = os.path.splitext(os.path.basename(self.player.path))[0]
+        types = [("PNG", "*.png", ".png"), ("BMP", "*.bmp", ".bmp"), ("TIFF", "*.tif", ".tif"), ("WebP", "*.webp", ".webp")]
+        vp = self._vp()                                       # в замку - ті налаштування, з якими файл порахований
+        if vp.glyph:
+            types.append((tr("Текст (.txt, символи)"), "*.txt", ".txt"))
+        flt = ";;".join(f"{n} ({pat})" for n, pat, _ in types)
+        name = f"{base}_{int(self.player.position()) + 1:05d}.png"
+        out, chosen = QFileDialog.getSaveFileName(self, tr("Зберегти кадр як фото"), os.path.join(self._src_dir() or "", name), flt)
+        if not out:
+            return
+        if not os.path.splitext(out)[1]:                       # як defaultextension у Tk: без розширення - за вибраним типом (типово .png)
+            ext = next((e for n, pat, e in types if chosen.startswith(n)), ".png")
+            out += ext
+        try:
+            if os.path.splitext(out)[1].lower() == ".txt":
+                mh, mw = mask.shape[:2]
+                save_text(glyph.text_from_mask(mask, mw, mh, vp.gdens), out)
+            else:
+                save_still(mask, out, self._pal_key())
+            self._last_out = out
+            self._say("Кадр збережено:\n{p}\nклік — відкрити теку", done=True, p=self._short_path(out))
+        except Exception as e:  # noqa: BLE001
+            self._say("Помилка: {e}", e=e)
+
     # ------------------------------------------------------------------ рівень: підпис секції й пояснення
     def _show_method(self, n):
         """у смузі заголовка секції - лише кодова назва поточного рівня; пояснення під повзунком"""

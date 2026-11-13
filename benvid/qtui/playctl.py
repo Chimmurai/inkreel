@@ -216,7 +216,17 @@ class PlayerMixin:
         foot, edit = self._on_footer(), self._editing()
         shift = bool(mods & Qt.ShiftModifier)
         done = True
-        if k == Qt.Key_Space and not (edit or foot):
+        if k == Qt.Key_Escape:
+            self._on_escape()                                # вихід з «кіно» чи F11
+        elif k in (Qt.Key_Plus, Qt.Key_Equal) and not (self._typing() or foot):
+            self._zoom_step(1)
+        elif k == Qt.Key_Minus and not (self._typing() or foot):
+            self._zoom_step(-1)
+        elif k == Qt.Key_0 and not (self._typing() or foot):
+            self._zoom_reset()
+        elif k == Qt.Key_1 and not (self._typing() or foot):
+            self._zoom_100()
+        elif k == Qt.Key_Space and not (edit or foot):
             self._toggle()
         elif k in (Qt.Key_Left, Qt.Key_Right) and not (edit or foot):
             d = -1 if k == Qt.Key_Left else 1

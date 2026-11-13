@@ -31,8 +31,10 @@ from .footer import FooterMixin
 from .labels import TkImage, TkLabel, TkStrip
 from .pix import PixButton, PixProgress, PixScroll, PixSlider, QualityBar
 from .playctl import Gap, PlayerMixin
+from .shellctl import ShellMixin
 from .sizectl import SizeMixin
 from .stacks import PageStack, ScrollStack
+from .statusctl import StatusMixin
 from .surface import FrameSurface
 from .theme import THEME
 from .tkcompat import Frame
@@ -60,10 +62,11 @@ def _fixed(b: PixButton, w: int) -> PixButton:
     return b
 
 
-class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMainWindow):
+class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, StatusMixin, ShellMixin, QMainWindow):
     TITLE = "InkReel"
     SEEK_GAP = 0.04
     auto_done = Signal(int, str)                 # результат підбору розміру «Авто» з фонового потоку (токен, ключ розміру)
+    bring_front_req = Signal(str, object)        # з потоку слухача одиночного запуску: (шлях, подія «оброблено»)
 
     @property
     def _tip_n(self) -> int:
@@ -77,8 +80,13 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
     def __init__(self, path: str | None = None):
         super().__init__()
         ui = (load_settings() or {}).get("ui", {})
-        i18n.set_lang(ui.get("lang") or i18n.lang())
+        il = i18n.install_lang()                                        # нова установка з іншою мовою інсталятора - застосувати її один раз
+        if il and ui.get("install_lang") != il:
+            ui["lang"], ui["install_lang"] = il, il
+        i18n.set_lang(ui.get("lang") or i18n.detect())                  # перший запуск - мова системи, далі - вибір користувача
         self.ui = ui
+        self._fs = self._wfs = self._side_open = False                  # «кіно» (F), F11 і чи висунута права панель у F11
+        self._pre_fs = None
         self.params = Params()
         try:
             m0 = min(BRANCH, max(1, int(ui.get("method", 4))))
@@ -102,6 +110,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
         self.size_key = sz
         self._auto_size, self._auto_tok, self._branch_back = None, 0, False
         self._last_dir, self._out_dir, self._lock_p = None, None, None
+        self._last_lay_t, self._lay_req, self._hud_t, self._last_rng_t, self._pm, self._fr_idx, self._stat_full = 0.0, None, 0.0, 0.0, None, 0, ""
         try:
             self.fps_sel = max(0.0, float(ui.get("fps", 0) or 0))   # ліміт к/с, який хоче користувач (0 - як в оригіналі); діє, коли він нижчий за fps відео
         except (TypeError, ValueError):
@@ -118,7 +127,8 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
         self._last_info = 0.0
         self._exp_msg = ("", {})
         self.setWindowTitle(self.TITLE)
-        self.resize(1280, 860)
+        self._set_icon()
+        self._initial_size()
         THEME.set_key(self._pal_key())
         self._build()
         self._apply_theme()
@@ -128,16 +138,21 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
         self.export.live.connect(self._on_live)
         self.export.finished.connect(self._on_export_done)
         self.auto_done.connect(self._auto_done)
+        self.bring_front_req.connect(self._on_bring_front)
+        self._init_drop()
         self.tick = QTimer(self)
         self.tick.timeout.connect(self._tick)
         self.tick.start(8)
         QShortcut(QKeySequence("Ctrl+O"), self, activated=lambda: None if self.export.running else self._open())
         QShortcut(QKeySequence("Ctrl+S"), self, activated=self._export)
         QShortcut(QKeySequence(Qt.Key_F1), self, activated=self._goto_guide)
+        QShortcut(QKeySequence(Qt.Key_F11), self, activated=self._window_fullscreen)
         QApplication.instance().installEventFilter(self)             # клік поза полем вводу забирає з нього фокус (PlayerMixin.eventFilter)
         QShortcut(QKeySequence(Qt.Key_PageUp), self, activated=lambda: None if self._typing() else self.pstack.step(-1))
         QShortcut(QKeySequence(Qt.Key_PageDown), self, activated=lambda: None if self._typing() else self.pstack.step(1))
         self._wheel_acc = 0
+        self.setFocusPolicy(Qt.StrongFocus)              # клавіші плеєра працюють одразу: початковий фокус не в полі «свій розмір», а на самому вікні (як у Tk)
+        self.setFocus()
         if path and os.path.isfile(path):
             QTimer.singleShot(50, lambda: self._open(path))
 
@@ -188,16 +203,27 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
 
         # центр: екран у рамці 1 px + права панель
         mid = Frame(self.main)
-        ml = _hbox(mid, (M, 0, M, 0))
+        ml = self.mid_lay = _hbox(mid, (M, 0, M, 0))
         frame = Frame(mid, role="fg")
         _vbox(frame, (1, 1, 1, 1))
         self.surface = FrameSurface(frame)
         frame.layout().addWidget(self.surface)
         ml.addWidget(frame, 1)
-        ml.addSpacing(M)
+        self.gap_side = Gap(M, 0)
+        ml.addItem(self.gap_side)
         self.side = Frame(mid)
         self.side.setFixedWidth(SIDE_W)
         ml.addWidget(self.side)
+        self.gap_edge = Gap(M, 0)                       # кнопка на правому краю: лише в F11 (висуває/ховає праву панель)
+        ml.addItem(self.gap_edge)
+        self.edge = PixButton(mid, "", command=self._toggle_side, width=EDGE_W, height=H_M, icon="left")
+        self.edge.FLASH = False
+        self.edge.setFixedWidth(EDGE_W)
+        self.edge.setMaximumHeight(16777215)
+        self.edge.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        ml.addWidget(self.edge)
+        self.gap_edge.on(False)
+        self.edge.hide()
         self.side_in = Frame(self.side)
         self.side_bar = PixScroll(self.side, SB_W)
         self.sstack = ScrollStack(self.side, self.side_bar, [(self.side_in, lambda w, h: max(self.side_in.winfo_reqheight(), h), None)], gap=M)
@@ -253,7 +279,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
         rl.addWidget(self.btn_loop)
         self.gap_photo = Gap(GG, 0)
         rl.addItem(self.gap_photo)
-        self.btn_photo = _fixed(PixButton(row, "", command=lambda: None, width=152, height=H_L), 152)
+        self.btn_photo = _fixed(PixButton(row, "", command=self._save_frame, width=152, height=H_L), 152)
         rl.addWidget(self.btn_photo)
         self.gap_time = Gap(GG, 0)
         rl.addItem(self.gap_time)
@@ -268,6 +294,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
         self._build_footer()
         self._last_out, self._prog_done, self._freeze_out = "", False, None
         self.prog_lbl.clicked = self._open_out                      # клік по підсумку експорту відкриває теку з результатом
+        self.surface.clicked.connect(self._toggle)                  # клік по картинці - пауза/відтворення
         self._init_eggs()
         self._install_tips()
 
@@ -713,40 +740,6 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
         else:
             self._freeze_out = None
 
-    # ------------------------------------------------------------------------------ такт
-    def _tick(self):
-        if not self.ready:
-            return
-        r = self.player.update()
-        if r:
-            self.surface.set_mask(r[1])
-        now = time.perf_counter()
-        if self._seek_pending is not None and now - self._seek_t >= self.SEEK_GAP:
-            self._seek_t = now
-            self.player.seek(int(self._seek_pending))
-            self._seek_pending = None
-        if now - self._last_info > 0.15:
-            self._last_info = now
-            pl = self.player
-            pos = pl.position()
-            if not self.seek.drag:
-                self.seek.set(pos)
-            if pl.kind == "image":
-                self.time_lbl.config(text=tr("ФОТО {w}×{h}", w=pl.info["width"], h=pl.info["height"]))
-            else:
-                self.time_lbl.config(text=f"{fmt_t(pl.time_of(pos))} / {fmt_t(pl.duration)}")
-            self.btn_play.set_icon(self._play_icon())
-            rs = []
-            k = max(1.0, (pl.n - 1) / max(1, self.seek.width() - 16))
-            for a, b in pl.buffered_ranges():
-                if rs and a - rs[-1][1] <= k:
-                    rs[-1][1] = b
-                else:
-                    rs.append([a, b])
-            self.seek.set_ranges([tuple(r) for r in rs])
-            st = {"playing": "відтворення", "buffering": "буферизація…", "paused": "пауза"}[pl.state]
-            self.stat_lbl.config(text=f"{tr(st)} · {tr('обробка {r:.0f} к/с', r=pl.render_fps())} · {pl.workers}×")
-
     def _typing(self) -> bool:
         """фокус у полі введення: клавіші-літери й PgUp/PgDn тоді належать полю"""
         from PySide6.QtWidgets import QLineEdit
@@ -783,6 +776,12 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
     def resizeEvent(self, e):
         super().resizeEvent(e)
 
+    def showEvent(self, e):
+        super().showEvent(e)
+        if not getattr(self, "_focused_once", False):
+            self._focused_once = True
+            self.setFocus(Qt.OtherFocusReason)           # Qt за замовчуванням віддає фокус першому полю введення: клавіші плеєра тоді мовчали б, доки не клікнеш деінде
+
     hard_exit = False                                    # справжній запуск (main) ставить True: див. closeEvent
 
     def closeEvent(self, e):
@@ -798,6 +797,9 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, QMai
                 _log.get().exception("закриття: крок не вдався")
         if self.hard_exit:
             step(procs.arm_exit_watchdog, 10.0)          # страховка від зависання будь-якого з кроків нижче (драйвер звуку, диск); далі - 4 с
+        lst = getattr(self, "_single", None)
+        if lst:
+            step(lst.close)                              # порт вільний одразу: швидкий повторний запуск стане слухачем сам
         step(self._party_stop)
         step(self._bubble_close)
         step(self.export.stop)
@@ -843,13 +845,31 @@ class PaletteSwatch(QWidget):
 
 
 def main(argv=None) -> int:
+    """справжній запуск Qt-вікна: масштаб екрана лише цілими кроками (піксельний інтерфейс лишається чітким), одиночний запуск (повторний запуск передає файл
+    уже відкритому вікну й виходить), після закриття процес не лишається у фоні"""
     import multiprocessing
 
+    from PySide6.QtCore import Qt as _Qt
+    from PySide6.QtGui import QGuiApplication
     from PySide6.QtWidgets import QApplication
     multiprocessing.freeze_support()
     argv = sys.argv if argv is None else argv
+    if os.environ.get("INKREEL_DPI") != "0":
+        QGuiApplication.setHighDpiScaleFactorRoundingPolicy(_Qt.HighDpiScaleFactorRoundingPolicy.Floor)     # 125-175 % -> 1x, 200 % -> 2x: без розмитих пікселів
     app = QApplication.instance() or QApplication(argv)
-    w = MainWindow(argv[1] if len(argv) > 1 else None)
+    path = argv[1] if len(argv) > 1 and os.path.isfile(argv[1]) else None
+    from .. import single
+    lst = single.acquire(os.path.abspath(path) if path else "")
+    if lst is False:                                  # InkReel уже запущено: файл передано йому
+        return 0
+    w = MainWindow(path)
     w.hard_exit = True
+    w._single = lst or None
+    if lst:
+        lst.start(lambda p: w.deliver(p))
     w.show()
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        from .. import procs
+        procs.release_everything(4.0, lst or None)    # вікно зникло будь-яким шляхом - процес не лишається у фоні

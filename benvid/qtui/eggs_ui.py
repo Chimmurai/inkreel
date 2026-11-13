@@ -71,7 +71,7 @@ class EggsMixin:
                 continue
             self._tip(w, key)
         self._tip(self.btn_play, lambda: tr(PLAY_TIPS[1] if self.export.running else PLAY_TIPS[0]))
-        self._tip(self.stat_lbl, lambda: self.stat_lbl.text_)
+        self._tip(self.stat_lbl, lambda: self._stat_full)
         for k, key in SIZE_TIPS.items():
             if k in self.size_btns:
                 self._tip(self.size_btns[k], key)
