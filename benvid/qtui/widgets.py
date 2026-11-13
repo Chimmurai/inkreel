@@ -174,6 +174,26 @@ class PixSlider(_Pix):
         p.drawLine(QPointF(x, r.top() + 3), QPointF(x, r.bottom() - 3))
 
 
+class PixProgress(_Pix):
+    def __init__(self, parent=None, h: int = 14):
+        super().__init__(parent)
+        self.f = 0.0
+        self.setFixedHeight(h)
+
+    def set(self, f: float):
+        f = min(max(f, 0.0), 1.0)
+        if abs(f - self.f) > 1e-4:
+            self.f = f
+            self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.fillRect(self.rect(), THEME.bg)
+        p.setPen(QPen(THEME.fg, 1))
+        p.drawRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1))
+        p.fillRect(QRectF(2, 2, (self.width() - 4) * self.f, self.height() - 4), THEME.fg)
+
+
 class QualityBar(_Pix):
     """п'ять кіл на одній лінії, обране заповнене; праворуч на пунктирному відгалуженні ромб IRNM1 (окрема гілка, а не шостий щабель)"""
     chosen = Signal(int)

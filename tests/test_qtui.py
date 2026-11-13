@@ -164,6 +164,47 @@ def test_window_opens_a_picture_and_shows_the_real_engine_output(qapp, win, tmp_
     assert win.surface.mask is not None and win.surface.mask.shape[1] > 20
 
 
+def test_window_exports_a_photo_a_gif_and_a_video_with_progress(qapp, win, tmp_path, monkeypatch):
+    """експорт на справжніх функціях двигуна: фото PNG, відео MP4 з прогресом, скасування"""
+    from PIL import Image
+    from benvid.qtui import window as W
+    pic = tmp_path / "pic.png"
+    Image.fromarray((np.random.RandomState(6).rand(90, 160) * 255).astype(np.uint8)).save(pic)
+    win._open(str(pic))
+    assert spin(qapp, lambda: win.surface._img is not None, timeout=60)
+    assert win.kind == "image"
+    out = tmp_path / "out.png"
+    monkeypatch.setattr(W.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(out), "")))
+    win._export()
+    assert spin(qapp, lambda: not win.export.running and out.exists(), timeout=60), win.prog_lbl.text()
+    assert "Готово" in win.prog_lbl.text() and win.btn_export.isEnabled() and not win.btn_stop.isEnabled()
+    assert Image.open(out).size[0] > 10
+
+    sys_path = os.path.dirname(__file__)
+    import sys
+    sys.path.insert(0, sys_path)
+    from test_video import make_video
+    vid = tmp_path / "clip.mp4"
+    make_video(str(vid), n=40, w=160, h=90)
+    win._open(str(vid))
+    assert win.kind == "video" and win.fmt_cb.count() >= 1 and win.q_cb.isVisibleTo(win)
+    out2 = tmp_path / "clip_bw.mp4"
+    monkeypatch.setattr(W.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(out2), "")))
+    seen = []
+    win.export.progress.connect(lambda f, *a: seen.append(f))
+    win._export()
+    assert win.export.running and not win.btn_export.isEnabled() and win.btn_stop.isEnabled()
+    assert spin(qapp, lambda: not win.export.running, timeout=120), win.prog_lbl.text()
+    assert out2.exists() and out2.stat().st_size > 1000 and "Готово" in win.prog_lbl.text()
+    assert seen and max(seen) > 0.5 and win.prog.f == 1.0
+
+    win._export()                                    # скасування: стоп під час роботи
+    assert spin(qapp, lambda: win.export.running, timeout=5)
+    win.export.stop()
+    assert spin(qapp, lambda: not win.export.running, timeout=60)
+    assert win.btn_export.isEnabled()
+
+
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     seeks = []
     monkeypatch.setattr(win.player, "seek", lambda f: seeks.append(int(f)))

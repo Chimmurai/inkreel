@@ -46,6 +46,9 @@ class Theme(QObject):
         QWidget {{ background: {bg}; color: {fg}; }}
         QToolTip {{ background: {bg}; color: {fg}; border: 1px solid {fg}; padding: 3px; }}
         QScrollArea {{ border: none; }}
+        QComboBox {{ border: 1px solid {fg}; padding: 3px 6px; background: {bg}; color: {fg}; selection-background-color: {fg}; selection-color: {bg}; }}
+        QComboBox::drop-down {{ border: none; width: 18px; }}
+        QComboBox QAbstractItemView {{ border: 1px solid {fg}; background: {bg}; color: {fg}; selection-background-color: {fg}; selection-color: {bg}; outline: 0; }}
         QScrollBar:vertical {{ background: {bg}; width: 12px; border: 1px solid {fg}; margin: 0; }}
         QScrollBar::handle:vertical {{ background: {fg}; min-height: 24px; margin: 2px; }}
         QScrollBar::handle:vertical:hover {{ background: {fg}; }}

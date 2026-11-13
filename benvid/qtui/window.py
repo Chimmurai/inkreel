@@ -11,20 +11,21 @@ import time
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QFileDialog, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QScrollArea, QSizePolicy,
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QScrollArea, QSizePolicy,
                                QVBoxLayout, QWidget)
 
 from .. import i18n, palette
 from ..core import BRANCH, MAIN_LEVELS, METHOD_INFO, METHODS, Params
 from ..engine import load_settings, save_settings
-from ..i18n import tr
-from ..media import GIF_EXT, IMAGE_EXT
+from ..i18n import tn, tr
+from ..media import GIF_EXT, GIF_FORMATS, IMAGE_EXT, still_formats
 from ..player import Player
-from ..video import SIZES, VIDEO_EXT
+from ..video import FORMATS, QUALITY, SIZES, VIDEO_EXT, out_size
 from . import theme
+from .export import ExportController
 from .surface import FrameSurface
 from .theme import THEME, font
-from .widgets import PixButton, PixSlider, QualityBar, Section
+from .widgets import PixButton, PixProgress, PixSlider, QualityBar, Section
 
 AUTO = "Авто"
 SIZE_KEYS = [AUTO] + list(SIZES)
@@ -185,7 +186,37 @@ class MainWindow(QMainWindow):
             prow.addWidget(w, 1 if w is self.pal_lbl else 0)
         self.sec_pal.body.addLayout(prow)
         sl.addWidget(self.sec_pal)
+
+        self.sec_exp = Section()
+        self.fmt_cb, self.q_cb = QComboBox(), QComboBox()
+        self.fmt_cb.setFocusPolicy(Qt.TabFocus)
+        self.q_cb.setFocusPolicy(Qt.TabFocus)
+        crow = QHBoxLayout()
+        crow.addWidget(self.fmt_cb, 3)
+        crow.addWidget(self.q_cb, 2)
+        self.sec_exp.body.addLayout(crow)
+        erow = QHBoxLayout()
+        self.btn_export = PixButton("", min_w=120, h=30)
+        self.btn_export.clicked.connect(self._export)
+        self.btn_stop = PixButton("", min_w=70, h=30)
+        self.btn_stop.clicked.connect(lambda: self.export.stop())
+        self.btn_stop.setEnabled(False)
+        erow.addWidget(self.btn_export, 1)
+        erow.addWidget(self.btn_stop)
+        self.sec_exp.body.addLayout(erow)
+        self.prog = PixProgress()
+        self.sec_exp.body.addWidget(self.prog)
+        self.prog_lbl = Label("", dim=True)
+        self.prog_lbl.setWordWrap(True)
+        self.sec_exp.body.addWidget(self.prog_lbl)
+        sl.addWidget(self.sec_exp)
         sl.addStretch(1)
+        self.kind = "video"
+        self.export = ExportController(self)
+        self.export.progress.connect(self._on_progress)
+        self.export.live.connect(self._on_live)
+        self.export.finished.connect(self._on_export_done)
+        self._exp_msg = ("", {})
 
         self.todo = Label("", dim=True)
         self.todo.setWordWrap(True)
@@ -212,6 +243,12 @@ class MainWindow(QMainWindow):
         self.sec_q.setTitle(tr("Якість") + f" · {tr(METHODS[self.params.method])}")
         self.sec_size.setTitle(tr("Розмір результату"))
         self.sec_pal.setTitle(tr("Палітра"))
+        self.sec_exp.setTitle(tr("Експорт"))
+        self.btn_export.setText(tr({"video": "Зберегти…", "gif": "Зберегти GIF", "image": "Зберегти фото"}[self.kind]))
+        self.btn_stop.setText(tr("Стоп"))
+        self._fill_formats(keep=True)
+        if self._exp_msg[0]:
+            self.prog_lbl.setText(tr(self._exp_msg[0], **self._exp_msg[1]))
         self.pal_lbl.setText(tr(self.pal_name))
         self.q_info.setText(tr(METHOD_INFO[self.params.method]))
         self.qbar.setLevel(self.params.method)
@@ -223,6 +260,34 @@ class MainWindow(QMainWindow):
         self.title_lbl.setText(self._name if self.ready else tr("— файл не відкрито —"))
 
     _name = ""
+
+    def _formats(self) -> dict:
+        """{ключ формату: розширення} для типу відкритого файла (відео, GIF, фото; для фото в «Символах» є ще .txt)"""
+        if self.kind == "video":
+            return {k: v[0] for k, v in FORMATS.items()}
+        if self.kind == "gif":
+            return dict(GIF_FORMATS)
+        return dict(still_formats(self.params.glyph))
+
+    def _fill_formats(self, keep: bool = False):
+        fmts = list(self._formats())
+        cur = self.fmt_cb.currentData() if keep else None
+        self.fmt_cb.blockSignals(True)
+        self.fmt_cb.clear()
+        for k in fmts:
+            self.fmt_cb.addItem(tr(k), k)
+        want = cur if cur in fmts else (self.ui.get("fmt") if self.kind == "video" and self.ui.get("fmt") in fmts else fmts[0])
+        self.fmt_cb.setCurrentIndex(fmts.index(want))
+        self.fmt_cb.blockSignals(False)
+        self.q_cb.blockSignals(True)
+        cq = self.q_cb.currentData() if keep else None
+        self.q_cb.clear()
+        for k in QUALITY:
+            self.q_cb.addItem(tr(k), k)
+        qk = list(QUALITY)
+        self.q_cb.setCurrentIndex(qk.index(cq if cq in qk else (self.ui.get("quality") if self.ui.get("quality") in qk else qk[0])))
+        self.q_cb.blockSignals(False)
+        self.q_cb.setVisible(self.kind == "video")
 
     def _set_lang(self, code: str):
         if code != i18n.lang():
@@ -302,6 +367,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "InkReel", tr("Не вдалося відкрити файл:\n{e}\n\nДеталі: {p}", e=e, p=""))
             return
         self.ready = True
+        self.path = path
+        self.kind = info["kind"]
+        self._fill_formats()
         self._name = os.path.basename(path)
         self.player.set_params(self.params)
         self.surface.reset_view()
@@ -312,8 +380,87 @@ class MainWindow(QMainWindow):
         self._tr()
 
     def _toggle(self):
+        if self.export.running:                       # під час експорту пробіл ставить його на паузу й знімає (як у Tk)
+            if self.kind == "video":
+                self.export.toggle_pause()
+                self._on_progress(self.export.f, self.export.label, self.export.clock.elapsed() if self.export.clock else 0.0, None)
+            return
         if self.ready:
             self.player.toggle()
+
+    # ------------------------------------------------------------------------------ експорт
+    def _size_key(self) -> str:
+        return "720p" if self.size_key == AUTO else self.size_key        # «Авто» (підбір під швидкість ПК) ще на Tk-версії
+
+    def _export(self):
+        if not self.ready or self.export.running:
+            return
+        kind, fmt = self.kind, self.fmt_cb.currentData()
+        base = os.path.splitext(os.path.basename(self.path))[0] + "_bw"
+        if kind == "video":
+            ext, codec = FORMATS[fmt]
+        elif kind == "gif":
+            ext, codec = GIF_FORMATS[fmt], ("png" if fmt == "PNG-послідовність" else "gif")
+        else:
+            ext, codec = still_formats(True)[fmt], "still"
+        src_dir = os.path.dirname(self.path)
+        if codec == "png":
+            out = QFileDialog.getExistingDirectory(self, tr("Тека для PNG-кадрів"), src_dir)
+            out = os.path.join(out, base) if out else ""
+        else:
+            out, _ = QFileDialog.getSaveFileName(self, tr("Зберегти як"), os.path.join(src_dir, base + ext), tr(fmt) + " (*" + ext + ")")
+        if not out:
+            return
+        if os.path.normcase(os.path.abspath(out)) == os.path.normcase(os.path.abspath(self.path)):
+            self._say("Не можна зберегти поверх оригіналу — вибери інше ім'я")
+            return
+        pl = self.player
+        pl.pause()
+        self.btn_play.setText("▶")
+        size_key = self._size_key()
+        cache = None
+        if kind == "video" and not pl.baked:               # кадри цього розміру, вже пораховані плеєром, не рахуємо вдруге
+            psize, snap = pl.snapshot()
+            if psize == out_size(pl.info["width"], pl.info["height"], size_key):
+                cache = snap
+        pl.suspend(True)
+        for b in (self.btn_export, self.btn_open):
+            b.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+        self._say("Обробка…")
+        self.export.start(kind=kind, path=self.path, out=out, params=self.params, fmt=fmt, size_key=size_key, quality=self.q_cb.currentData() or "Висока",
+                          pal_name=self._pal_key(), audio=True, cache=cache, src_fps=pl.fps or 24.0, n_frames=pl.n)
+        self._last_out = out
+
+    def _say(self, key: str = "", **kw):
+        self._exp_msg = (key, kw)
+        self.prog_lbl.setText(tr(key, **kw) if key else "")
+
+    def _on_progress(self, f, label, el, eta):
+        if not self.export.running:                     # запізнілий звіт після завершення чи скасування
+            return
+        self.export.f, self.export.label = f, label
+        self.prog.set(f)
+        self.prog_lbl.setText(self.export.status(f, label, el, eta, tr))
+
+    def _on_live(self, mask):
+        if self.export.running and not self.export.pause_ev.is_set():
+            self.surface.set_mask(mask)
+
+    def _on_export_done(self, key, f, ok, kw):
+        pl = self.player
+        for fn in (lambda: pl.suspend(False), pl.refresh):
+            try:
+                fn()
+            except Exception:  # noqa: BLE001
+                pass
+        self.prog.set(f)
+        if "frames" in kw:
+            kw["frames"] = tn(kw["frames"], "{n} кадр|{n} кадри|{n} кадрів")
+        self._say(key, **kw)
+        for b in (self.btn_export, self.btn_open):
+            b.setEnabled(True)
+        self.btn_stop.setEnabled(False)
 
     def _step(self, d: int):
         if self.ready:
@@ -367,6 +514,8 @@ class MainWindow(QMainWindow):
             self.stat_lbl.setText(f"{tr(st)} · {tr('обробка {r:.0f} к/с', r=pl.render_fps())} · {pl.workers}×")
 
     def closeEvent(self, e):
+        self.export.stop()
+        self.export.join(3.0)
         self._save()
         try:
             self.player.close()

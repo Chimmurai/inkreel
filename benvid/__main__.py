@@ -23,6 +23,10 @@ def _run():
     elif a[:1] in (["--register-menu"], ["--unregister-menu"]):   # пункти меню правої кнопки без інсталятора (benvid/shellmenu.py)
         from .shellmenu import main as menu_main
         sys.exit(menu_main(a))
+    elif a[:1] == ["--qt"] or (os.environ.get("INKREEL_UI", "").lower() == "qt" and (not a or (len(a) == 1 and os.path.isfile(a[0])))):
+        # нове вікно на Qt (1.1, поки робоча версія; типове лишається Tk): `InkReel --qt [файл]` чи змінна INKREEL_UI=qt
+        from .qtui.window import main as qt_main
+        sys.exit(qt_main([sys.argv[0]] + [x for x in a if x != "--qt"]))
     elif len(a) == 1 and os.path.isfile(a[0]):   # перетягнули файл на ярлик / "відкрити за допомогою"
         from .gui import main
         main(a[0])
