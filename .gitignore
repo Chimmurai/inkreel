@@ -17,7 +17,18 @@ CLAUDE.md
 docs/PROGRAM_STATUS.md
 docs/HANDOFF_ARCHIVE.md
 docs/COMPLIANCE.md
+docs/QT_PORT.md
 reports/
+
+# Anything that looks like working notes, hand-offs, AI/assistant files or scratch material
+*.local.md
+NOTES*.md
+HANDOFF*
+memory/
+scratch/
+.cursor/
+.aider*
+.copilot*
 
 # Training leftovers (the app ships the exported ONNX models)
 weights/*/last.pt
