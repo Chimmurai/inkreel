@@ -67,6 +67,9 @@ class PixCombo(QComboBox):
         self.setFixedHeight(H_S)
         self.setEditable(editable)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        if not editable:                                  # список «лише вибір»: після вибору фокус не лишається в ньому - F, M, L, I, пробіл і стрілки належать плеєру
+            self.setFocusPolicy(Qt.ClickFocus)
+            self.activated.connect(lambda *_: self.clearFocus())
         THEME.changed.connect(self._style)
         self._style()
 

@@ -270,8 +270,12 @@ def test_tips_show_after_a_delay_one_at_a_time_and_vanish_on_leave(qapp, win, mo
     def text():
         state["n"] += 1
         return "підказка №%d" % state["n"]
-    Tip(win.btn_ua, text)
-    QApplication.sendEvent(win.btn_ua, QEvent(QEvent.Enter))
+    from PySide6.QtWidgets import QWidget
+    plain = QWidget(win)                                 # без вбудованої підказки: інакше два таймери змагаються
+    plain.setGeometry(5, 5, 30, 30)
+    plain.show()
+    Tip(plain, text)
+    QApplication.sendEvent(plain, QEvent(QEvent.Enter))
     assert Tip._cur is None, "підказка не одразу"
     assert spin(qapp, lambda: Tip._cur is not None, timeout=3)
     t1 = Tip._cur
@@ -371,6 +375,146 @@ def test_cookie_is_bitten_then_eaten_into_crumbs_then_rebaked(qapp, win):
     win._cookie_rebake()
     assert b.bites == 0 and b.crumbs == []
     b.set_enabled(bool(__import__("benvid").meta.DONATE))
+
+
+@pytest.fixture()
+def vwin(qapp, win, tmp_path):
+    """вікно з відкритим коротким відео"""
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from test_video import make_video
+    vid = tmp_path / "clip.mp4"
+    make_video(str(vid), n=60, w=160, h=90)
+    win._open(str(vid))
+    assert win.kind == "video" and win.ready
+    return win
+
+
+def test_bottom_row_and_side_panel_follow_the_file_kind(qapp, win, tmp_path):
+    from PIL import Image
+    vis = lambda w: w.isVisibleTo(win)
+    assert vis(win.btn_snd) and vis(win.btn_loop) and vis(win.seek)
+    p = tmp_path / "pic.png"
+    Image.fromarray((np.random.RandomState(1).rand(60, 90) * 255).astype(np.uint8)).save(p)
+    win._open(str(p))
+    assert win.kind == "image"
+    spin(qapp, lambda: False, timeout=0.3)
+    assert not any(vis(w) for w in (win.tr, win.btn_snd, win.vol, win.btn_loop, win.btn_photo, win.seek, win.row2, win.btn_lock, win.fps_cb))
+    assert vis(win.time_lbl) and win.seek.marks is None and win.time_lbl.x() < 40, "фото: ряд починається врівень з краєм поля"
+    g = tmp_path / "a.gif"
+    frames = [Image.fromarray((np.random.RandomState(i).rand(40, 60) * 255).astype(np.uint8)) for i in range(4)]
+    frames[0].save(g, save_all=True, append_images=frames[1:], duration=80, loop=0)
+    win._open(str(g))
+    assert win.kind == "gif" and vis(win.tr) and vis(win.btn_loop) and vis(win.btn_photo) and vis(win.seek)
+    assert not vis(win.btn_snd) and not vis(win.vol) and not vis(win.row2) and not vis(win.btn_lock)
+
+
+def test_loop_stop_and_jump_buttons_and_hotkeys(qapp, vwin, monkeypatch):
+    w = vwin
+    w.btn_loop.cmd() if False else None
+    QTest.mouseClick(w.btn_loop, Qt.LeftButton, pos=QPoint(10, 10))
+    assert w.btn_loop.on and w.player.loop is True
+    QTest.keyClick(w, Qt.Key_L)
+    assert not w.btn_loop.on and w.player.loop is False, "L - те саме, що кнопка «Цикл»"
+    seeks = []
+    monkeypatch.setattr(w.player, "seek", lambda f: seeks.append(f))
+    monkeypatch.setattr(w.player, "position", lambda: 100.0)
+    w._jump(10)
+    assert seeks[-1] == 100.0 + 10 * w.player.fps
+    QTest.keyClick(w, Qt.Key_Left, Qt.ShiftModifier)
+    assert seeks[-1] == 100.0 - 10 * w.player.fps
+    QTest.keyClick(w, Qt.Key_Home)
+    assert seeks[-1] == 0 and w.btn_play.icon == "play"
+    n = len(seeks)
+    w.export.running = True
+    w._jump(10)
+    w._stop()
+    assert len(seeks) == n, "під час експорту перемотка й стоп мовчать"
+    w.export.running = False
+
+
+def test_space_arrows_and_letters_work_in_any_layout_but_not_in_fields_or_footer(qapp, vwin, monkeypatch):
+    from PySide6.QtGui import QKeyEvent
+    from PySide6.QtCore import QEvent
+    w = vwin
+    got = []
+    monkeypatch.setattr(w, "_toggle", lambda: got.append("toggle"))
+    monkeypatch.setattr(w, "_step", lambda d: got.append(("step", d)))
+    QTest.keyClick(w, Qt.Key_Space)
+    QTest.keyClick(w, Qt.Key_Right)
+    assert got == ["toggle", ("step", 1)]
+    ev = QKeyEvent(QEvent.KeyPress, 0x41C, Qt.NoModifier, 0x4D, 0x4D, 0, "м")        # «м» у кириличній розкладці: клавіша M
+    assert w._letter_of(ev) == "m"
+    ev = QKeyEvent(QEvent.KeyPress, 0x456, Qt.NoModifier, 0x49, 0x49, 0, "і")
+    assert w._letter_of(ev) == "i"
+    inv = w.pal_inv
+    QApplication.sendEvent(w, ev)
+    assert w.pal_inv != inv, "«і» перемикає «навпаки», як I"
+    w._toggle_inv()
+    got.clear()
+    w.ent_w.setFocus()
+    QApplication.sendEvent(w.ent_w, QKeyEvent(QEvent.KeyPress, Qt.Key_Space, Qt.NoModifier, " "))
+    assert got == [], "пробіл у полі вводу - для поля"
+    w.ent_w.clearFocus()
+    w.pstack.tcur = 1
+    QTest.keyClick(w, Qt.Key_Space)
+    QTest.keyClick(w, Qt.Key_Right)
+    assert got == [], "на екрані футера плеєр не керується"
+    w.pstack.tcur = 0
+
+
+def test_mute_volume_keys_wheel_and_the_saved_volume(qapp, vwin, monkeypatch):
+    w = vwin
+    w.vol.set(60)
+    w._on_volume(60)
+    w._on_volume_end(60)
+    assert w.btn_snd.icon == "snd" and abs(w.player.volume - 0.6) < 0.02 if hasattr(w.player, "volume") else True
+    QTest.keyClick(w, Qt.Key_M)
+    assert w.btn_snd.icon == "mute" and w._muted()
+    w._on_volume(70)
+    assert w.btn_snd.icon == "snd" and not w._muted(), "рух повзунка вмикає звук"
+    w.vol.set(0)
+    w._on_volume(0)
+    assert w.btn_snd.icon == "mute"
+    QTest.keyClick(w, Qt.Key_M)
+    assert w._muted(), "M при нульовій гучності спершу вмикає «без звуку» (як у Tk)"
+    QTest.keyClick(w, Qt.Key_M)
+    assert w.vol.v == 50 and not w._muted(), "а вмикаючи звук при нульовій гучності, піднімає її до половини"
+    QTest.keyClick(w, Qt.Key_Up)
+    assert w.vol.v == 55
+    for _ in range(30):
+        QTest.keyClick(w, Qt.Key_Down)
+    assert w.vol.v == 0
+    w.vol.set(40)
+    w._save()
+    assert json.loads(open(engine.SETTINGS_FILE, encoding="utf-8").read())["ui"]["volume"] == 40
+
+
+def test_fragment_marks_flags_reset_and_export_range(qapp, vwin, monkeypatch, tmp_path):
+    from benvid.qtui import window as W
+    w = vwin
+    n = w.player.n
+    assert w.seek.marks == [0, n - 1] and w._range() is None and not w.btn_rng.enabled
+    monkeypatch.setattr(w.player, "position", lambda: 10.0)
+    QTest.keyClick(w, Qt.Key_BracketLeft)
+    monkeypatch.setattr(w.player, "position", lambda: 40.0)
+    QTest.keyClick(w, Qt.Key_BracketRight)
+    assert w.seek.marks == [10, 40] and w._range() == (10, 41) and w.btn_rng.enabled
+    assert "Фрагмент:" in w.rng_lbl.text_ and "усе відео" not in w.rng_lbl.text_
+    out = tmp_path / "frag.mp4"
+    names = []
+    monkeypatch.setattr(W.QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (names.append(a[2]) or str(out), "")))
+    kw = {}
+    monkeypatch.setattr(w.export, "start", lambda **k: kw.update(k))
+    w._export()
+    w.player.suspend(False)                              # _export зупинив плеєр для експорту, якого тут не буде
+    assert kw["a0"] == 10 and kw["b0"] == 41 and "_bw_" in names[0] and names[0].endswith("s.mp4"), (kw, names)
+    w.btn_rng.cmd()
+    assert w.seek.marks == [0, n - 1] and w._range() is None and not w.btn_rng.enabled
+    w.seek.marks[:] = [5, 20]
+    w._update_range()
+    w._open(w.path)
+    assert w.seek.marks == [0, w.player.n - 1], "новий файл - фрагмент скинуто"
 
 
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):

@@ -29,6 +29,7 @@ from .export import ExportController
 from .footer import FooterMixin
 from .labels import TkImage, TkLabel, TkStrip
 from .pix import PixButton, PixProgress, PixScroll, PixSlider, QualityBar
+from .playctl import Gap, PlayerMixin
 from .stacks import PageStack, ScrollStack
 from .surface import FrameSurface
 from .theme import THEME
@@ -57,7 +58,7 @@ def _fixed(b: PixButton, w: int) -> PixButton:
     return b
 
 
-class MainWindow(EggsMixin, FooterMixin, QMainWindow):
+class MainWindow(EggsMixin, FooterMixin, PlayerMixin, QMainWindow):
     TITLE = "InkReel"
     SEEK_GAP = 0.04
 
@@ -116,12 +117,10 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         self.tick = QTimer(self)
         self.tick.timeout.connect(self._tick)
         self.tick.start(8)
-        QShortcut(QKeySequence("Space"), self, activated=self._toggle)
-        QShortcut(QKeySequence("Ctrl+O"), self, activated=self._open)
-        QShortcut(QKeySequence(Qt.Key_Left), self, activated=lambda: self._step(-1))
-        QShortcut(QKeySequence(Qt.Key_Right), self, activated=lambda: self._step(1))
-        QShortcut(QKeySequence("I"), self, activated=self._toggle_inv)
+        QShortcut(QKeySequence("Ctrl+O"), self, activated=lambda: None if self.export.running else self._open())
+        QShortcut(QKeySequence("Ctrl+S"), self, activated=self._export)
         QShortcut(QKeySequence(Qt.Key_F1), self, activated=self._goto_guide)
+        QApplication.instance().installEventFilter(self)             # клік поза полем вводу забирає з нього фокус (PlayerMixin.eventFilter)
         QShortcut(QKeySequence(Qt.Key_PageUp), self, activated=lambda: None if self._typing() else self.pstack.step(-1))
         QShortcut(QKeySequence(Qt.Key_PageDown), self, activated=lambda: None if self._typing() else self.pstack.step(1))
         self._wheel_acc = 0
@@ -197,41 +196,53 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
 
         # низ: перемотування й транспорт
         bot = Frame(self.main)
-        bl = _vbox(bot, (M, M, M, M))
+        bl = self.bot_lay = _vbox(bot, (M, M, M, M))
         self.seek = PixSlider(bot, 0, 1, command=self._on_seek_drag, on_release=self._on_seek_end, height=34)
         bl.addWidget(self.seek)
-        bl.addSpacing(M)
+        self.gap_seek = Gap(0, M)
+        bl.addItem(self.gap_seek)
         row = Frame(bot)
-        rl = _hbox(row)
+        rl = self.row_lay = _hbox(row)
         self.tr = Frame(row)
         tl2 = _hbox(self.tr)
-        self.btn_rew = PixButton(self.tr, icon="rew", command=lambda: None, width=48, height=H_L)
+        self.btn_rew = PixButton(self.tr, icon="rew", command=lambda: self._jump(-10), width=48, height=H_L)
         self.btn_prev = PixButton(self.tr, icon="prev", command=lambda: self._step(-1), width=48, height=H_L)
         self.btn_play = PixButton(self.tr, icon="play", command=self._toggle, width=64, height=H_L)
-        self.btn_stopp = PixButton(self.tr, icon="stop", command=lambda: None, width=48, height=H_L)
+        self.btn_stopp = PixButton(self.tr, icon="stop", command=self._stop, width=48, height=H_L)
         self.btn_next = PixButton(self.tr, icon="next", command=lambda: self._step(1), width=48, height=H_L)
-        self.btn_fwd = PixButton(self.tr, icon="fwd", command=lambda: None, width=48, height=H_L)
+        self.btn_fwd = PixButton(self.tr, icon="fwd", command=lambda: self._jump(10), width=48, height=H_L)
         for i, (b, w) in enumerate(((self.btn_rew, 48), (self.btn_prev, 48), (self.btn_play, 64), (self.btn_stopp, 48), (self.btn_next, 48), (self.btn_fwd, 48))):
             _fixed(b, w)
             if i:
                 tl2.addSpacing(M)
             tl2.addWidget(b)
         rl.addWidget(self.tr)
-        rl.addSpacing(GG)
-        self.btn_snd = _fixed(PixButton(row, icon="snd", command=lambda: None, width=48, height=H_L), 48)
-        self.vol = PixSlider(row, 0, 100, command=lambda v: None, height=26)
+        self.gap_snd = Gap(GG, 0)
+        rl.addItem(self.gap_snd)
+        self.btn_snd = _fixed(PixButton(row, icon="snd", command=self._mute, width=48, height=H_L), 48)
+        try:
+            vol0 = min(100, max(0, int(self.ui.get("volume", 100))))
+        except (TypeError, ValueError):
+            vol0 = 100
+        self.vol = PixSlider(row, 0, 100, command=self._on_volume, on_release=self._on_volume_end, height=26)
         self.vol.setFixedWidth(96)
-        self.vol.set(100)
+        self.vol.set(vol0)
+        self.player.set_volume(vol0 / 100)
+        self.btn_snd.set_icon("mute" if vol0 == 0 else "snd")
         rl.addWidget(self.btn_snd)
-        rl.addSpacing(G)
+        self.gap_vol = Gap(G, 0)                          # повзунок гучності «прикріплений» до кнопки звуку
+        rl.addItem(self.gap_vol)
         rl.addWidget(self.vol, 0, Qt.AlignVCenter)
-        rl.addSpacing(GG)
-        self.btn_loop = _fixed(PixButton(row, "", command=lambda: None, width=72, height=H_L, toggle=True), 72)
+        self.gap_loop = Gap(GG, 0)
+        rl.addItem(self.gap_loop)
+        self.btn_loop = _fixed(PixButton(row, "", command=self._toggle_loop, width=72, height=H_L, toggle=True), 72)
         rl.addWidget(self.btn_loop)
-        rl.addSpacing(GG)
+        self.gap_photo = Gap(GG, 0)
+        rl.addItem(self.gap_photo)
         self.btn_photo = _fixed(PixButton(row, "", command=lambda: None, width=152, height=H_L), 152)
         rl.addWidget(self.btn_photo)
-        rl.addSpacing(GG)
+        self.gap_time = Gap(GG, 0)
+        rl.addItem(self.gap_time)
         self.time_lbl = TkLabel(row, "0:00 / 0:00", font=FONT_B, anchor="w")
         rl.addWidget(self.time_lbl, 0, Qt.AlignVCenter)
         rl.addSpacing(M)
@@ -361,20 +372,22 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         rl.addSpacing(G)
         rl.addWidget(self.q_cb)
         b.addWidget(row)
-        b.addSpacing(M)
+        self.gap_row2 = Gap(0, M)
+        b.addItem(self.gap_row2)
         self.row2 = Frame(s.inner)
         r2 = _hbox(self.row2)
         self.btn_aud = _fixed(PixButton(self.row2, "", command=lambda: None, width=TOG_W, height=H_S, toggle=True), TOG_W)
         self.btn_aud.set_on(bool(self.ui.get("audio", True)))
         self.rng_lbl = TkLabel(self.row2, "", font=FONT_S, anchor="w")
-        self.btn_rng = _fixed(PixButton(self.row2, "", command=lambda: None, width=TOG_W, height=H_S), TOG_W)
+        self.btn_rng = _fixed(PixButton(self.row2, "", command=self._reset_range, width=TOG_W, height=H_S), TOG_W)
         r2.addWidget(self.btn_aud)
         r2.addSpacing(M)
         r2.addWidget(self.rng_lbl, 1, Qt.AlignVCenter)
         r2.addSpacing(M)
         r2.addWidget(self.btn_rng)
         b.addWidget(self.row2)
-        b.addSpacing(M)
+        self.gap_fps = Gap(0, M)
+        b.addItem(self.gap_fps)
         self.fps_cb = PixCombo(s.inner, editable=True)
         self.row_fps = self.fps_cb
         b.addWidget(self.fps_cb)
@@ -382,7 +395,8 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         self.btn_export2 = PixButton(s.inner, "", assets.img("save_w"), self._export, width=100, height=H_M)
         self.btn_export2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         b.addWidget(self.btn_export2)
-        b.addSpacing(M)
+        self.gap_lock = Gap(0, M)
+        b.addItem(self.gap_lock)
         self.btn_lock = PixButton(s.inner, "", command=lambda: None, width=100, height=H_M)
         self.btn_lock.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         b.addWidget(self.btn_lock)
@@ -464,10 +478,6 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         self.fps_cb.setCurrentIndex(0)
         self.fps_cb.blockSignals(False)
 
-    def _update_range(self):
-        self.rng_lbl.config(text=tr("Фрагмент: усе відео\n[ ] — межі фрагмента"))
-        self.btn_rng.set_enabled(False)
-
     def _formats(self) -> dict:
         if self.kind == "video":
             return {k: v[0] for k, v in FORMATS.items()}
@@ -505,7 +515,7 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
     def _save(self):
         d = dict(self.ui)
         d.update(palette=self.pal_name, pal_inv=bool(self.pal_inv), method=self.params.method, glyph=bool(self.params.glyph), size=self.size_key,
-                 lang=i18n.lang(), gdens3=int(self.params.gdens), guide=self.guide_sel)
+                 lang=i18n.lang(), gdens3=int(self.params.gdens), guide=self.guide_sel, volume=int(self.vol.v))
         try:
             save_settings({"ui": d})
         except Exception:  # noqa: BLE001
@@ -585,14 +595,15 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         self._show_app()
         self.ready = True
         self.path = path
-        self.kind = info["kind"]
-        self._fill_formats()
         self._name = os.path.basename(path)
         self.player.set_params(self.params)
         self.surface.reset_view()
         self.surface.set_mask(None)
+        self._apply_kind(info["kind"])
         self.seek.lo, self.seek.hi = 0, max(1, info["frames"] - 1)
+        self.seek.ranges = []
         self.seek.set(0)
+        self._reset_range()
         self.btn_play.set_icon("play")
         self._tr()
 
@@ -604,10 +615,6 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
             return
         if self.ready:
             self.player.toggle()
-
-    def _step(self, d: int):
-        if self.ready:
-            self.player.step(d)
 
     def _on_seek_drag(self, v: float):
         self._seek_pending = v
@@ -631,6 +638,10 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         from ..video import FORMATS as VF
         kind, fmt = self.kind, self.fmt_cb.currentData()
         base = os.path.splitext(os.path.basename(self.path))[0] + "_bw"
+        rng = self._range() if kind == "video" else None
+        if rng:
+            base += f"_{int(rng[0] / (self.player.fps or 24))}-{int(rng[1] / (self.player.fps or 24))}s"
+        a0, b0 = rng if rng else (0, None)
         if kind == "video":
             ext, codec = VF[fmt]
         elif kind == "gif":
@@ -665,7 +676,7 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         self._prog_done = False
         self._say("Обробка…")
         self.export.start(kind=kind, path=self.path, out=out, params=self.params, fmt=fmt, size_key=size_key, quality=self.q_cb.currentData() or "Висока",
-                          pal_name=self._pal_key(), audio=self.btn_aud.on, cache=cache, src_fps=pl.fps or 24.0, n_frames=pl.n)
+                          pal_name=self._pal_key(), audio=self.btn_aud.on, cache=cache, src_fps=pl.fps or 24.0, n_frames=pl.n, a0=a0, b0=b0)
         self._last_out = out
 
     def _say(self, key: str = "", **kw):
@@ -760,7 +771,9 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
         sg = 1 if steps > 0 else -1
         w = QApplication.widgetAt(e.globalPosition().toPoint())
         for _ in range(abs(steps)):
-            if self._inside(w, self.side) and self.sstack.overflow:
+            if self._inside(w, self.vol):
+                self._vol_step(5 * sg)
+            elif self._inside(w, self.side) and self.sstack.overflow:
                 self.sstack.notch(sg)
             elif self.pstack.enabled:
                 self.pstack.notch(sg)
@@ -769,16 +782,34 @@ class MainWindow(EggsMixin, FooterMixin, QMainWindow):
     def resizeEvent(self, e):
         super().resizeEvent(e)
 
+    hard_exit = False                                    # справжній запуск (main) ставить True: див. closeEvent
+
     def closeEvent(self, e):
-        self._party_stop()
-        self._bubble_close()
-        self.export.stop()
-        self.export.join(3.0)
-        self._save()
-        try:
-            self.player.close()
-        except Exception:  # noqa: BLE001
-            pass
+        """закриття вікна, як App._close: процес мусить справді зникнути (інакше невидимий InkReel лишається в диспетчері завдань).
+        Кожен крок окремо - збій одного не повинен лишити решту живими; аварійний вихід (os._exit) лише в справжньому запуску, не в тестах"""
+        from .. import procs
+
+        def step(fn, *a):
+            try:
+                fn(*a)
+            except Exception:  # noqa: BLE001
+                from .. import log as _log
+                _log.get().exception("закриття: крок не вдався")
+        if self.hard_exit:
+            step(procs.arm_exit_watchdog, 10.0)          # страховка від зависання будь-якого з кроків нижче (драйвер звуку, диск); далі - 4 с
+        step(self._party_stop)
+        step(self._bubble_close)
+        step(self.export.stop)
+        step(self.export.join, 3.0)
+        step(self._save)
+        step(self.player.close)
+        # усі пули й дочірні процеси (+ аварійний вихід за 4 с). У окремому потоці: зламаний пул іноді не дає себе зупинити (shutdown чекає на
+        # власний потік-менеджер), і вікно не повинно через це висіти; такий потік гасить аварійний вихід
+        if self.hard_exit:                               # (у тестах чужі пули не чіпаємо: вікон багато, а процес спільний)
+            import threading
+            th = threading.Thread(target=step, args=(procs.release_everything, 4.0), daemon=True, name="inkreel-release")
+            th.start()
+            th.join(3.0)
         super().closeEvent(e)
 
 
@@ -818,5 +849,6 @@ def main(argv=None) -> int:
     argv = sys.argv if argv is None else argv
     app = QApplication.instance() or QApplication(argv)
     w = MainWindow(argv[1] if len(argv) > 1 else None)
+    w.hard_exit = True
     w.show()
     return app.exec()
