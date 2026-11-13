@@ -86,6 +86,7 @@ def _tw(text, font=FONT):
 
 
 _IMG_CACHE: dict = {}
+_KEYS: dict = {}          # клас віджета -> набір його параметрів (див. App._apply_theme)
 
 
 def _select_value(w):
@@ -1049,6 +1050,9 @@ class App(tk.Tk):
         self._bub, self._bub_job, self._last_quote = None, None, -1
         self._party_job, self._party_orig, self._cookie_job = None, "", None
         self._save_job = None
+        self._pal_job, self._pal_t = None, 0.0                             # відкладене перемальовування кадра після швидкої серії кроків палітри
+        self._photo_key, self._paint_sig = None, None                      # режим/розмір кадра на полотні й підпис його розкладки (швидкий шлях _paint)
+        self._seek_job, self._seek_t, self._seek_val = None, 0.0, 0     # обмеження частоти seek при перетягуванні повзунка перемотування
         self._auto_size = None
         self._auto_tok = 0
         self._last_dir = None
@@ -1131,9 +1135,17 @@ class App(tk.Tk):
             tw, th = tile.width(), tile.height()
             cw = max(c.winfo_width(), 10)
             off = (cw % tw) // 2                  # неповні плитки - порівну з обох країв, а не лише з правого
-            for x in range(-off, cw + tw, tw):
-                for y in range(0, height, th):
-                    c.create_image(x, y, image=tile, anchor="nw")
+            # одна картинка на всю смугу замість сотні плиток-елементів: Tk сам розмножує плитку в `copy -to` (на C), а полотно малює один елемент.
+            # Раніше кожна зміна палітри чи розміру створювала ≈130 create_image на смугу, а їх шість
+            try:
+                strip = tk.PhotoImage(master=c, width=cw + off + tw, height=height)
+                strip.tk.call(strip, "copy", tile, "-to", 0, 0, cw + off + tw, height)
+                c._strip = strip                  # тримаємо посилання: інакше Tk зітре картинку
+                c.create_image(-off, 0, image=strip, anchor="nw")
+            except tk.TclError:                   # запасний шлях: плитка за плиткою
+                for x in range(-off, cw + tw, tw):
+                    for y in range(0, height, th):
+                        c.create_image(x, y, image=tile, anchor="nw")
         c.bind("<Configure>", redraw)
         c.redraw = redraw
         self._strips.append(c)
@@ -2160,7 +2172,14 @@ class App(tk.Tk):
         self._set_theme_globals(key)
         if (o_bg, o_fg, o_dim) == (BG, FG, DIM):
             return
-        rgb = self.winfo_rgb
+        _rgb = self.winfo_rgb
+        _rc = {}
+
+        def rgb(c):                                         # один winfo_rgb на колір, а не на кожен параметр кожного віджета (було ≈700 викликів Tcl на крок палітри)
+            v = _rc.get(c)
+            if v is None:
+                v = _rc[c] = _rgb(c)
+            return v
         mp = {rgb(o_bg): BG, rgb(o_fg): FG, rgb(o_dim): DIM}
         # лише канонічні назви параметрів: «bg» і «background» - один параметр, і друге читання бачило б уже НОВИЙ колір та
         # перефарбовувало б його вдруге (при «навпаки» тло й текст міняються місцями: чорне -> біле -> знову чорне)
@@ -2170,10 +2189,14 @@ class App(tk.Tk):
 
         def walk(w):
             if not isinstance(w, ttk.Widget):
-                try:
-                    have = set(w.keys())
-                except Exception:  # noqa: BLE001
-                    have = set()
+                have = _KEYS.get(type(w))                   # набір параметрів однаковий для всього класу: один keys() на клас, а не на кожен із ≈140 віджетів
+                if have is None:
+                    try:
+                        have = frozenset(w.keys())
+                    except Exception:  # noqa: BLE001
+                        have = frozenset()
+                    if type(w) is not tk.Toplevel:
+                        _KEYS[type(w)] = have
                 new = {}
                 for o in opts:                              # спершу читаємо ВСІ старі кольори, потім ставимо нові разом
                     if o in have:
@@ -2249,8 +2272,19 @@ class App(tk.Tk):
     def _set_palette(self):
         self._apply_theme(self._pal_key())
         self._draw_swatch()
-        self._redraw()
+        now = time.perf_counter()
+        if now - getattr(self, "_pal_t", 0.0) < 0.15:         # швидка серія кроків (стрілки з автоповтором, клацання): інтерфейс перефарбовується щоразу,
+            if self._pal_job:                                 # а важкий кадр - раз після останнього кроку, інакше черга подій не встигає за рукою
+                self.after_cancel(self._pal_job)
+            self._pal_job = self.after(60, self._pal_redraw)
+        else:
+            self._redraw()
+        self._pal_t = now
         self._save_soon()
+
+    def _pal_redraw(self):
+        self._pal_job = None
+        self._redraw()
 
     def _save_soon(self):
         if self._save_job:
@@ -3147,13 +3181,32 @@ class App(tk.Tk):
         self.seek.draw()
         self._update_range()
 
+    SEEK_GAP = 0.04                                   # повзунок перемотування: не частіше за 25 переходів на секунду
+
     def _on_seek_drag(self, v):
+        """мишка шле до тисячі подій на секунду, а кожен seek скасовує рендер, що ще йде: без обмеження жоден кадр не встигав домалюватись,
+        доки повзунок тримають. Тепер найновіше значення віддається плеєру раз на SEEK_GAP, а решта подій лише запам'ятовується"""
         self._seek_hold = True
-        if self.ready:
-            self.player.seek(int(v))
+        self._seek_val = v
+        if not self.ready:
+            return
+        wait = self.SEEK_GAP - (time.perf_counter() - self._seek_t)
+        if wait <= 0 and self._seek_job is None:
+            self._seek_apply()
+        elif self._seek_job is None:
+            self._seek_job = self.after(max(1, int(wait * 1000)), self._seek_apply)
+
+    def _seek_apply(self):
+        self._seek_job = None
+        self._seek_t = time.perf_counter()
+        if self.ready and self._seek_hold:
+            self.player.seek(int(self._seek_val))
 
     def _on_seek_end(self, v):
         self._seek_hold = False
+        if self._seek_job is not None:
+            self.after_cancel(self._seek_job)
+            self._seek_job = None
         if self.ready:
             self.player.seek(int(v))
 
@@ -3361,8 +3414,9 @@ class App(tk.Tk):
         """покласти вже складений кадр (результат view.compose) на полотно разом із написами"""
         self._npaint += 1
         _tp0 = time.perf_counter()
-        self.screen.delete("all")
         if comp is None:
+            self.screen.delete("all")
+            self._paint_sig = None
             wrap = max(160, min(cw - 40, 620))
             self.screen.create_text(cw // 2, ch // 2 - 36, text=tr("Відкрий відео, GIF або фото\nабо просто перетягни файл у це вікно"),
                                     fill=FG, font=FONT_B, justify="center", width=wrap)
@@ -3386,10 +3440,13 @@ class App(tk.Tk):
             if crop:
                 im = im.crop((crop[0], crop[1], crop[0] + crop[2], crop[1] + crop[3]))
             ph = self._photo
-            if isinstance(ph, ImageTk.PhotoImage) and (ph.width(), ph.height(), ph.mode) == (im.width, im.height, im.mode):
+            # ImageTk.PhotoImage не має публічного `.mode` (лише приватний), тож колишня перевірка `ph.mode` кидала AttributeError, і щодруга картинка
+            # йшла запасним шляхом через PGM-текст (21-25 мс замість ≈10 на 2580×1080, у журналі показу це режим «?»): режим тримаємо самі
+            if isinstance(ph, ImageTk.PhotoImage) and self._photo_key == (im.width, im.height, im.mode) and (ph.width(), ph.height()) == (im.width, im.height):
                 ph.paste(im)                          # той самий розмір - перевикористати
             else:
                 ph = ImageTk.PhotoImage(im)
+                self._photo_key = (im.width, im.height, im.mode)
             photo = ph
         except Exception:  # noqa: BLE001
             photo = None
@@ -3402,8 +3459,22 @@ class App(tk.Tk):
                 rgb = arr if arr.ndim == 2 else np.ascontiguousarray(arr[..., ::-1])      # PNG-кодер чекає BGR
                 ok, buf = cv2.imencode(".png", rgb, [cv2.IMWRITE_PNG_COMPRESSION, 0])
                 photo = tk.PhotoImage(data=base64.b64encode(buf.tobytes()))
+        reused = photo is self._photo
         self._photo = photo
         _tp1 = time.perf_counter()
+        # Швидкий шлях: картинку вже змінено на місці (paste), а розкладка полотна та сама (позиція, розмір, масштаб, мова, тема, без пасхалки):
+        # елементи полотна не чіпаємо - ні delete("all"), ні нових create_*, лише рухомий HUD. Раніше кожен кадр перебудовував усе (≈15 мс)
+        sig = (cw, ch, px, py, photo.width(), photo.height(), self._zoom, i18n.lang(), BG, FG)
+        if reused and sig == self._paint_sig and self._egg_t0 is None:
+            self._pan_cursor(cw, ch)
+            self._draw_hud()
+            pa = self._pacc
+            pa["img"] += _tp1 - _tp0
+            pa["items"] += time.perf_counter() - _tp1
+            pa["n"] += 1
+            return
+        self.screen.delete("all")
+        self._paint_sig = sig if self._egg_t0 is None else None
         self.screen.create_image(px, py, image=photo, anchor="nw")
         self._pan_cursor(cw, ch)
         if px > 0 or py > 0:                          # картинка менша за поле: рамка по її краю (з проміжком 2 px) - тло вікна збігається з кольором туші, тож без неї край зливається

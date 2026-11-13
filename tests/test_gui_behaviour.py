@@ -62,6 +62,84 @@ def _canvas_colours(app):
     return found
 
 
+# ---------------------------------------------------------------- 1.0.1: швидкість інтерфейсу
+def _fake_frame(app, w=300, h=160, seed=0):
+    rng = np.random.RandomState(seed)
+    img = (rng.rand(h, w) > 0.5).astype(np.uint8) * 255
+    cw, ch = app.screen.winfo_width(), app.screen.winfo_height()
+    return (img, 1, max(0, (cw - w) // 2), max(0, (ch - h) // 2), None), cw, ch
+
+
+def test_paint_reuses_the_photo_and_canvas_items_between_frames(app):
+    """кадр того самого розміру: картинка змінюється на місці (paste), елементи полотна не перебудовуються.
+    Раніше `ph.mode` (його в ImageTk.PhotoImage нема) кидав AttributeError, і щодруга картинка йшла повільним запасним шляхом"""
+    import tkinter as tk
+    from PIL import ImageTk
+    settle(app)
+    comp, cw, ch = _fake_frame(app)
+    app._paint(comp, cw, ch)
+    first_photo, items = app._photo, set(app.screen.find_all())
+    assert isinstance(first_photo, ImageTk.PhotoImage) and items
+    for k in range(6):
+        comp, cw, ch = _fake_frame(app, seed=k + 1)
+        app._paint(comp, cw, ch)
+        assert app._photo is first_photo, "картинку на полотні треба перевикористовувати, а не створювати заново"
+        assert not isinstance(app._photo, tk.PhotoImage) or isinstance(app._photo, ImageTk.PhotoImage)
+        assert set(app.screen.find_all()) == items, "елементи полотна не мають перебудовуватись, поки розкладка та сама"
+    comp, cw, ch = _fake_frame(app, w=210)              # інший розмір картинки: розкладка змінилась, усе перемальовано
+    app._paint(comp, cw, ch)
+    assert app._photo is not first_photo and set(app.screen.find_all()) != items
+    app._redraw()
+
+
+def test_palette_steps_in_a_burst_repaint_the_frame_once(app, monkeypatch):
+    """швидка серія кроків палітри: інтерфейс перефарбовується щоразу, а важкий кадр - один раз після останнього кроку"""
+    from benvid import palette
+    names = palette.NAMES
+    calls = []
+    real = app._redraw
+    monkeypatch.setattr(app, "_redraw", lambda: calls.append(1) or real())
+    app._pal_t = 0.0
+    start = app.pal_var.get()
+    for i in range(8):
+        app._step_palette(1)
+    assert len(calls) == 1, "перший крок малює кадр одразу, наступні відкладено"
+    assert pump(app, lambda: len(calls) == 2, timeout=3), "після серії кадр перемальовується один раз"
+    assert app.pal_var.get() == names[(names.index(start) + 8) % len(names)]
+    app.pal_var.set("Класика")
+    app._set_palette()
+    app._pal_t = 0.0
+
+
+def test_seek_slider_drag_is_throttled_and_the_release_seeks_exactly(app, monkeypatch):
+    """тисяча подій миші на секунду не мають слати тисячу seek: плеєр отримує найновіше значення раз на SEEK_GAP, а відпускання - точне"""
+    seeks = []
+    monkeypatch.setattr(app.player, "seek", lambda f: seeks.append(int(f)))
+    monkeypatch.setattr(app, "ready", True)
+    app._seek_t = 0.0
+    t0 = time.perf_counter()
+    for i in range(200):
+        app._on_seek_drag(i)
+        time.sleep(0.0005)
+    spent = time.perf_counter() - t0
+    assert 1 <= len(seeks) <= int(spent / app.SEEK_GAP) + 3, (len(seeks), spent)
+    app._on_seek_end(777)
+    assert seeks[-1] == 777
+    n = len(seeks)
+    pump(app, lambda: False, timeout=0.2)
+    assert len(seeks) == n and app._seek_job is None and not app._seek_hold, "після відпускання відкладений seek не спрацьовує"
+
+
+def test_tile_strips_are_one_canvas_item_each(app):
+    """смуги з плиток (дитер, плівка): один елемент-картинка на смугу замість сотні плиток"""
+    settle(app)
+    assert app._strips
+    for st in app._strips:
+        st.redraw()
+        if st.winfo_width() > 20:
+            assert len(st.find_all()) == 1, (str(st), len(st.find_all()))
+
+
 def test_inversion_recolours_the_whole_window(app):
     """кнопка «навпаки» діє не лише на картинку: тло й текст вікна міняються місцями («Класика~» - біле вікно з чорним текстом),
     і жоден віджет не лишається в старих кольорах"""
