@@ -1,0 +1,54 @@
+name: Bug report
+description: Something does not work as it should
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: InkReel version
+      description: Shown at the bottom of the "About" page (press F1 or the "?" button).
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where did you get it?
+      options:
+        - Microsoft Store
+        - InkReel-Setup.exe from GitHub
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Windows and graphics card
+      placeholder: "Windows 11 23H2, NVIDIA GeForce RTX 3060, 1920x1080 at 125%"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: If you can, tell which level (Sketch ... Engraving, IRNM1), mode (Ink or Symbols) and file type you used.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open a video ...\n2. ..."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log files
+      description: >
+        Please attach `inkreel.log` and, if the app crashed, `crash.log` from `%LOCALAPPDATA%\InkReel`
+        (paste that path into the Explorer address bar). They contain no names or file paths beyond what the app printed on screen.
+  - type: checkboxes
+    id: prev
+    attributes:
+      label: Did it work in the previous version?
+      options:
+        - label: Yes, this is new in the latest version

@@ -48,12 +48,12 @@ def test_tracked_text_files_do_not_mention_assistants():
 
 
 def test_shipped_pngs_carry_no_embedded_metadata():
-    """картинки, що їдуть у програму й пакет (benvid/assets, store/Assets), не мають вбудованих метаданих: ні текстових блоків, ні EXIF, ні
+    """картинки, що їдуть у програму й пакет (benvid/assets, store/Assets, docs/screenshots), не мають вбудованих метаданих: ні текстових блоків, ні EXIF, ні
     маніфестів походження (C2PA, блок caBX): у програмі лише пікселі й те, що потрібно для показу"""
     import struct
     bad = []
     for p in _tracked():
-        if not p.lower().endswith(".png") or not p.startswith(("benvid/", "store/")):
+        if not p.lower().endswith(".png") or not p.startswith(("benvid/", "store/", "docs/")):
             continue
         with open(os.path.join(ROOT, p), "rb") as f:
             data = f.read()

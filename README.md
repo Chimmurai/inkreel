@@ -1,5 +1,7 @@
 # InkReel
 
+[![tests](https://github.com/Chimmurai/inkreel/actions/workflows/tests.yml/badge.svg)](https://github.com/Chimmurai/inkreel/actions/workflows/tests.yml)
+
 *The world is made of two colors.*
 
 InkReel is a free Windows 10/11 (64-bit) app that turns video, photos and GIFs into pure black and white: every pixel is either ink or paper, with dots, strokes and grain chosen by what is in the frame.
@@ -9,6 +11,19 @@ InkReel is a free Windows 10/11 (64-bit) app that turns video, photos and GIFs i
 **Download:** [latest release](https://github.com/Chimmurai/inkreel/releases/latest) (`InkReel-Setup.exe`)
 
 > **Official sources.** InkReel is made by Raimex and is published in exactly three places: this repository, the [Microsoft Store](https://apps.microsoft.com/detail/9NW62SPG91ZR) and the [website](https://inkreel.raimex.space). The release page lists the SHA-256 of every installer. Copies from anywhere else are not ours.
+
+![Engraving level on a sea at night](docs/screenshots/engraving.png)
+
+| Drawing level | Symbols mode |
+|---|---|
+| ![Drawing level on a night city](docs/screenshots/drawing.png) | ![Symbols mode on a lighthouse](docs/screenshots/symbols.png) |
+
+## Install
+
+- **Microsoft Store:** https://apps.microsoft.com/detail/9NW62SPG91ZR (updates arrive on their own)
+- **Installer:** `InkReel-Setup.exe` from the [latest release](https://github.com/Chimmurai/inkreel/releases/latest). It is not code-signed yet, so Windows SmartScreen may warn about an unknown publisher ("More info" > "Run anyway"). Compare the SHA-256 on the release page with your download if you like.
+
+Requirements: Windows 10 or newer, 64-bit, 4 GB of memory (8 or more recommended). A graphics card is optional; it only speeds up IRNM1.
 
 ## What it does
 
