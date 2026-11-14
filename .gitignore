@@ -35,6 +35,12 @@ weights/*/last.pt
 weights/*/preview_*.png
 weights/student_backup/
 
+# Store working notes and helper script (kept locally, not in the public repo)
+store/STORE.md
+store/UPDATE_*.md
+store/identity.json.example
+store/make_test_cert.ps1
+
 # Store signing material
 store/identity.json
 *.pfx

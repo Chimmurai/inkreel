@@ -13,8 +13,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 FORBIDDEN = re.compile(
     r"(^|/)(CLAUDE|AGENTS|GEMINI)\.md$|(^|/)\.claude(/|$)|(^|/)\.cursor(/|$)|(^|/)memory(/|$)|(^|/)scratch(/|$)|(^|/)reports/"
-    r"|docs/(PROGRAM_STATUS|HANDOFF_ARCHIVE|COMPLIANCE|QT_PORT)\.md$|HANDOFF|(^|/)NOTES[^/]*\.md$|\.local\.md$|identity\.json$"
-    r"|\.pfx$|\.pem$|\.key$|(^|/)\.env|(^|/)WebSite/|(^|/)weights/[^/]+/last\.pt$",
+    r"|docs/(PROGRAM_STATUS|HANDOFF_ARCHIVE|COMPLIANCE|QT_PORT|DEVELOPER_NOTES|STRUCTURE)\.md$|HANDOFF|(^|/)NOTES[^/]*\.md$|\.local\.md$|identity\.json$"
+    r"|store/(STORE|UPDATE_[^/]*)\.md$|store/identity\.json\.example$|store/make_test_cert\.ps1$|\.pfx$|\.pem$|\.key$|(^|/)\.env|(^|/)WebSite/|(^|/)weights/[^/]+/last\.pt$",
     re.IGNORECASE)
 
 

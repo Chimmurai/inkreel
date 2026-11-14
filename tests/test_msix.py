@@ -87,8 +87,11 @@ def test_identity_file_with_bom_is_read(tmp_path):
 
 def test_the_example_file_cannot_be_used_unchanged():
     """зразок ніхто не мусить встигнути завантажити в Store з XXXX замість справжніх значень"""
+    example = os.path.join(ROOT, "store", "identity.json.example")
+    if not os.path.exists(example):
+        pytest.skip("зразок identity.json.example лежить лише в локальній теці store (не в git)")
     with pytest.raises(mm.BuildError, match="зразок"):
-        mm.load_identity(os.path.join(ROOT, "store", "identity.json.example"))
+        mm.load_identity(example)
 
 
 @pytest.mark.parametrize("field,value", [("name", "ab"), ("name", "has space.InkReel"), ("name", "x" * 60), ("publisher", "InkReelDev"),
@@ -646,8 +649,14 @@ def test_about_tab_points_to_the_notices_in_both_languages():
 GENERATED = {"store\\identity.json", "store\\privacy.html", "store\\InkReelDev.pfx", "store\\InkReelDev.cer"}
 
 
+def _store_guide() -> str:
+    if not os.path.exists(os.path.join(ROOT, "store", "STORE.md")):
+        pytest.skip("store/STORE.md лежить лише в локальній теці (не в git)")
+    return read("store", "STORE.md")
+
+
 def test_store_guide_refers_only_to_files_that_exist():
-    text = read("store", "STORE.md")
+    text = _store_guide()
     seen = 0
     for token in re.findall(r"`([^`\n]+)`", text):
         t = token.strip()
@@ -661,5 +670,5 @@ def test_store_guide_refers_only_to_files_that_exist():
 
 
 def test_store_guide_tells_the_one_decision_about_the_version():
-    text = read("store", "STORE.md")
+    text = _store_guide()
     assert '__version__ = "1.0.0"' in text and "identity.json" in text and "make_privacy_page.py" in text
