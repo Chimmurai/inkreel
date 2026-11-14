@@ -1032,6 +1032,23 @@ def test_file_from_the_command_line_opens_and_a_long_name_is_shortened_keeping_t
     assert win.title_lbl.dim and "файл не відкрито" in win.title_lbl.text_
 
 
+def test_irnm1_branch_plays_a_video_and_the_status_names_the_backend(qapp, vwin):
+    from benvid.core import BRANCH
+    from benvid.student import runtime as sr
+    if sr.mode() == "off" or not sr.files_ok() or sr._ort() is None:
+        pytest.skip("IRNM1 тут недоступна (немає моделі чи onnxruntime)")
+    w = vwin
+    w._set_level(BRANCH)
+    assert w.params.method == BRANCH and w.m_slider.v == BRANCH and "IRNM1" in w.sec_q.title.text_
+    w.player.seek(10)
+    assert spin(qapp, lambda: not w.player.waiting_frame() and w.surface.mask is not None, timeout=120)
+    assert spin(qapp, lambda: "IRNM1" in w._stat_full, timeout=30), w._stat_full         # (у вузькому підписі найменш важливе зникає: повний рядок - у підказці)
+    w._set_glyph(True)                                   # у «Символах» шостого рівня нема: IRNM1 відкладається
+    assert w.params.method == 5 and w._branch_back
+    w._set_glyph(False)
+    assert w.params.method == BRANCH
+
+
 def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     seeks = []
     monkeypatch.setattr(win.player, "seek", lambda f: seeks.append(int(f)))

@@ -140,6 +140,12 @@ def pytest_sessionfinish(session, exitstatus):
 
     def _force():
         time.sleep(15.0)
+        try:
+            import multiprocessing
+            for p in multiprocessing.active_children():      # os._exit не чіпає дітей: обробники пулу лишались би осиротілими (по ~230 МБ кожен) після кожного такого виходу
+                p.kill()
+        except Exception:  # noqa: BLE001
+            pass
         os._exit(int(exitstatus))
     threading.Thread(target=_force, daemon=True, name="pytest-exit-guard").start()      # СПЕРШУ страховка: зламаний пул може заблокувати й сам kill_all_pools
     def _kill():
