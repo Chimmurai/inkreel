@@ -5,9 +5,9 @@ garland hanging over it in three depths: far strips that are small and hazy, mid
 on the film is another scene, also run through the app. No text anywhere, as the Store asks for art.
 
     python tools/make_listing_art.py     ->  store/listing_assets/SuperHeroArt_1920x1080.png, SuperHeroArt_3840x2160.png,
-                                              StoreBoxArt_1080x1080.png, StoreBoxArt_1080x1080_centered.png, StorePosterArt_1440x2160.png
+                                              StoreBoxArt_1080x1080.png, StorePosterArt_1440x2160.png
 
-The 4K hero and the poster are the same drawing doubled with nearest-neighbour, so every dot stays a crisp square, like a 2x zoom in the app.
+The box art is a plain square of the same sea, with no film on it. The 4K hero and the poster are the same drawing doubled with nearest-neighbour, so every dot stays a crisp square, like a 2x zoom in the app.
 Needs the scenes first (tools/make_listing_scenes.py) and the project environment: it calls `python -m benvid`, and the IRNM1 or DirectML
 parts need onnxruntime in that environment (this script itself only uses Engraving)."""
 from __future__ import annotations
@@ -34,12 +34,15 @@ _cache: dict = {}
 
 def render(scene: str, crop: tuple[float, float] | None, height: int, method: int = 5) -> np.ndarray:
     """a scene through the app at exactly `height` px tall; returns a bool array (True = paper/white).
-    `crop` = (aspect, x-centre 0..1) takes a window of the 1920x1080 source first"""
+    `crop` = (aspect, x-centre 0..1) takes a full-height window of the 1920x1080 source first; (x, y, w, h) takes that pixel box"""
     key = (scene, crop, height, method)
     if key in _cache:
         return _cache[key]
     src = Image.open(os.path.join(SCENES, scene)).convert("RGB")
-    if crop:
+    if crop and len(crop) == 4:
+        x, y, w, h = crop
+        src = src.crop((x, y, x + w, y + h))
+    elif crop:
         aspect, cx = crop
         w = int(round(src.height * aspect))
         x0 = int(np.clip(cx * src.width - w / 2, 0, src.width - w))
@@ -193,14 +196,9 @@ def hero() -> None:
 
 
 def box() -> None:
-    H = W = 1080
-    out = render(HERO_SCENE, (1.0, 0.64), H, 5).copy()
-    put(out, *lay(swag(-120, 980, 2, 150), Strip(24, 22, 11), (H, W), 9), haze=0.62)
-    put(out, *lay(swag(560, 1300, -10, 190), Strip(48, 46, 12), (H, W), 13), halo=5)
-    put(out, *lay(swag(-330, 600, -60, 560), Strip(78, 74, 13), (H, W), 5), halo=7)
-    dust(out, 22, (40, H - 40), 90)
+    """a plain square: the moon, the sloop and the sea, nothing laid over it"""
+    out = render(HERO_SCENE, (840, 110, 820, 820), 1080, 5)
     save(out, "StoreBoxArt_1080x1080.png")
-    save(out, "StoreBoxArt_1080x1080_centered.png")
 
 
 def poster() -> None:
