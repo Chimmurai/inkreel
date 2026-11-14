@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
+import os
 import sys
 import time
 
@@ -230,6 +230,21 @@ def test_window_palette_language_and_level_controls(qapp, win):
     assert i18n.lang() == "en" and win.btn_open.text == "Open"
     win._set_lang("uk")
     assert win.btn_open.text == "Відкрити"
+
+
+def test_button_pictures_follow_the_palette(qapp, win):
+    """значки кнопок («Відкрити», «Зберегти», «Стоп») перефарбовуються разом з палітрою, а не лишаються білими"""
+    from benvid.qtui.theme import THEME
+    for _ in range(len(palette.NAMES)):
+        win._step_palette(1)
+        fg = (THEME.fg.red(), THEME.fg.green(), THEME.fg.blue())
+        for b in (win.btn_open, win.btn_export, win.btn_export2, win.btn_stop):
+            im = b.im
+            ink = im.ink
+            px = im.pixelColor((ink[0] + ink[2]) // 2, (ink[1] + ink[3]) // 2)
+            seen = {(im.pixelColor(x, y).red(), im.pixelColor(x, y).green(), im.pixelColor(x, y).blue())
+                    for x in range(ink[0], ink[2]) for y in range(ink[1], ink[3]) if im.pixelColor(x, y).alpha() > 200}
+            assert fg in seen, (palette.NAMES, win.pal_name, fg, sorted(seen)[:4])
 
 
 def test_window_opens_a_picture_and_shows_the_real_engine_output(qapp, win, tmp_path):

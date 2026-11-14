@@ -175,9 +175,9 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, Stat
         tl.addSpacing(M)
         tl.addWidget(self.lbl_logo, 0, Qt.AlignVCenter)
         tl.addSpacing(GG)
-        self.btn_open = _fixed(PixButton(top, "", assets.img("open_w"), self._open, width=HEAD_W), HEAD_W)
-        self.btn_export = _fixed(PixButton(top, "", assets.img("save_w"), self._export, width=HEAD_W), HEAD_W)
-        self.btn_stop = _fixed(PixButton(top, "", assets.img("x_w"), lambda: self.export.stop(), width=HEAD_W), HEAD_W)
+        self.btn_open = _fixed(PixButton(top, "", "open_w", self._open, width=HEAD_W), HEAD_W)
+        self.btn_export = _fixed(PixButton(top, "", "save_w", self._export, width=HEAD_W), HEAD_W)
+        self.btn_stop = _fixed(PixButton(top, "", "x_w", lambda: self.export.stop(), width=HEAD_W), HEAD_W)
         for b in (self.btn_open, self.btn_export, self.btn_stop):
             tl.addWidget(b, 0, Qt.AlignVCenter)
             tl.addSpacing(M)
@@ -444,7 +444,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, Stat
         self.row_fps = self.fps_cb
         b.addWidget(self.fps_cb)
         b.addSpacing(M)
-        self.btn_export2 = PixButton(s.inner, "", assets.img("save_w"), self._export, width=100, height=H_M)
+        self.btn_export2 = PixButton(s.inner, "", "save_w", self._export, width=100, height=H_M)
         self.btn_export2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         b.addWidget(self.btn_export2)
         self.gap_lock = Gap(0, M)

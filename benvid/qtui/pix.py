@@ -66,7 +66,9 @@ class PixButton(_Base):
         super().__init__(parent)
         w = width or (len(text) * 9 + 22 if text else 38)
         self.text, self.cmd, self.on, self.enabled, self.toggle = text, command, False, True, toggle
-        self.im, self._bw, self._bh, self.hover, self.icon, self.join = image, w, height, False, icon, join
+        self.im_name = image if isinstance(image, str) else None     # ім'я малюнка: перефарбовується разом із темою при кожному малюванні
+        self._im = None if self.im_name else image
+        self._bw, self._bh, self.hover, self.icon, self.join = w, height, False, icon, join
         self.bites, self.crumbs = 0, []
         self.on_press = None
         self._pressed = False
@@ -75,6 +77,14 @@ class PixButton(_Base):
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.setFixedHeight(height)
         self.resize(w, height)
+
+    @property
+    def im(self):
+        return assets.img(self.im_name) if self.im_name else self._im      # assets.img кешує за (ім'я, тло, колір)
+
+    @im.setter
+    def im(self, v):
+        self.im_name, self._im = (v, None) if isinstance(v, str) else (None, v)
 
     def sizeHint(self):
         return QSize(*self._want)
