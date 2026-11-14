@@ -494,7 +494,7 @@ def test_privacy_claims_hold_for_the_code():
             assert not re.search(r"^\s*(?:import|from)\s+socket\b", src, re.M), f"{name}: сокети лише в single.py (локальна адреса)"
     single = read("benvid", "single.py")
     assert "127.0.0.1" in single and "0.0.0.0" not in single                  # слухаємо лише локальну адресу
-    assert read("benvid", "gui.py").count("webbrowser.open") == 2, "нове відкриття браузера: перегляньте store/PRIVACY.md"       # лише кнопка донату (її в Store сховано)
+    assert read("benvid", "gui.py").count("webbrowser.open") == 3, "нове відкриття браузера: перегляньте store/PRIVACY.md"       # кнопка донату (її в Store сховано) і офіційні посилання «Про програму» (лише за кліком користувача)
 
 
 def test_privacy_page_replaces_the_contact_and_marks_languages():
