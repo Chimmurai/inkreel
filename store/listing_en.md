@@ -2,7 +2,8 @@
 
 Ready to paste into Partner Center → your app → Store listings → English (United States).
 Limits (Microsoft): description up to 10,000 characters of plain text, no HTML or links; short description up to 1,000 (the first 270 are what counts);
-up to 20 product features of 200 characters each (each line below goes into its own field, without the leading dash); "What's new" stays empty for the first release.
+up to 20 product features of 200 characters each (each line below goes into its own field, without the leading dash); screenshot captions up to 200 characters;
+"What's new" stays empty for the first release.
 Everything between the lines is the text itself; the headings are just labels.
 
 ## Product name
@@ -11,46 +12,48 @@ InkReel
 
 ## Short description
 
-The world is made of two colors. InkReel turns videos, GIFs and photos into black and white with character: pure 1-bit ink, no grey. Pick a size and a quality level, InkReel does the rest. Offline, no ads.
+The world is made of two colors. InkReel turns video, GIFs and photos into black and white with character: every pixel is ink or paper, and the tones are drawn with strokes, dots and grain. Free.
 
 ## Description
 
-The world is made of two colors. White is a pause. Black is a word. InkReel turns videos, GIFs and photos into pure black and white. Every pixel ends up either black or white, with no grey in between, yet shadows, outlines, text and texture stay readable: tones are drawn the way a person with a pen would draw them, with hatching along the shapes, dots and grain that flow into each other.
+The world is made of two colors. White is a pause. Black is a word.
 
-There is nothing to tweak. The look is chosen automatically for every frame. You only pick the size, the format and the quality.
+InkReel turns video, GIFs and photos into pure black and white. Every pixel becomes either ink or paper, with no grey in between, and yet shadows, outlines, text and texture stay readable. The tones are drawn the way a hand with a pen would draw them: strokes that follow the shapes, dots, grain that flows from one into the other.
 
-Watch it while you decide. The built-in player works ahead into a buffer (like the grey stretch on a video site's seek bar) and plays from it in time with the original: pause, step frame by frame, loop, go full screen, and zoom with the mouse wheel in whole-pixel steps, so every pixel stays a crisp square.
+Five levels, from a quick look to a finished print. Sketch is a fast local threshold, good for lines and text. Halftone makes the tones from noise, like a newspaper. Drawing chooses strokes, dots and grain by what is in the picture. Engraving lets the strokes follow the forms and keeps text crisp, with no flicker in video. Not sure? Try Engraving.
 
-What you can do
-- Open almost anything: common video files, GIF and animated PNG/WebP, and photos including HEIC from iPhones, AVIF, TIFF and PSD.
-- Choose a size from 144p up to the size of the source, or type your own width and height.
-- Pick one of five quality levels, from a quick "Sketch" to "Engraving", a mode in which strokes follow the shapes in the picture (Sketch, Outline, Halftone, Drawing, Engraving).
-- Recolour the result with 20 two-colour palettes (ink and paper) and flip them with one click.
-- Save as MP4, MKV, MOV, AVI, WebM, GIF, a PNG sequence or a compact JSON file, with the sound of the original if you want it. Save a single frame as PNG, BMP, TIFF or lossless WebP.
-- Use your graphics card's video encoder (NVIDIA, AMD or Intel) when there is one, and all the cores of your processor for export, while the window stays responsive.
-- Switch between Ukrainian and English at any time.
+Next to the five levels stands IRNM1, InkReel's own neural network. It is not a sixth step but a separate branch, much faster, and it runs on your graphics card (DirectML) or, without one, on the processor.
 
-Private by design. InkReel works completely offline: your files never leave your computer. No account, no ads, no tracking.
+Switch from Ink to Symbols and the frame is built from characters of a monospaced font, picked by tone, like text in a console. A photo or a frame can be saved as a .txt file.
 
-The interface is black-and-white pixel art in the spirit of the classic media players, with keyboard shortcuts for everything you do often. There are a few small surprises hidden in it.
+Ink and paper do not have to be black and white. There are 20 two-colour palettes, among them Classic, Ink & paper, Carmine, Cyanotype, Amber and Terminal, and one click turns any of them inside out. It is still two colours and nothing in between.
+
+Watch while you decide. The built-in player works ahead into a buffer and plays from it in time with the original: pause, frame step, loop, full screen. The mouse wheel zooms in whole steps up to 6400%, so every pixel stays a square, and the [ ] flags above the seek bar mark the fragment you want to save.
+
+What goes in: common video files, GIF, animated PNG and WebP, and photos including HEIC from iPhones, AVIF, TIFF and PSD. Drop a file on the window or open it from the button.
+
+What comes out: MP4 with the sound of the original, GIF, MKV, MOV, AVI, WebM, a PNG sequence or JSON. A single frame saves as PNG, BMP, TIFF or lossless WebP. "Render all" computes the whole video ahead and keeps it in InkReel's own .ikr file.
+
+Pick a size from 144p up to the size of the source, or type your own width and height. "Auto" chooses one your PC can play in real time. The interface is black-and-white pixel art in the spirit of the classic media players, in Ukrainian or English.
 
 InkReel is free. Black and white with character.
 
 ## Product features
 
-- Videos, GIFs and photos become pure black and white: every pixel is black or white, no grey.
-- Tones are drawn like a pen drawing: hatching along shapes, dots and grain that blend into each other.
-- No settings to fiddle with: the style is picked automatically for every frame.
-- Five quality levels, from a fast "Sketch" to engraving-style strokes in "Engraving".
-- Buffered player: pause, frame step, loop, full screen, mouse-wheel zoom in whole-pixel steps.
-- Sizes from 144p to the source size, or your own width and height.
-- 20 two-colour palettes with a one-click invert.
-- Export to MP4, MKV, MOV, AVI, WebM, GIF, PNG sequence and JSON, with sound if you want it.
+- Video, GIFs and photos become pure black and white: every pixel is ink or paper, with no grey.
+- Tones are drawn like a pen drawing: strokes along the shapes, dots and grain that flow into each other.
+- Five levels, from a fast "Sketch" to "Engraving", where the strokes follow the forms.
+- IRNM1: InkReel's own neural network on your graphics card (DirectML) or the processor, a separate branch next to the five levels.
+- Symbols mode: the frame is built from monospaced font characters picked by tone; save it as .txt.
+- 20 two-colour palettes and a one-click invert.
+- A buffered player: pause, frame step, loop, full screen, and mouse-wheel zoom in whole steps up to 6400%.
+- A [ ] fragment on the seek bar: save only the part you want.
+- Export to MP4 with sound, GIF, MKV, MOV, AVI, WebM, PNG sequence and JSON.
+- "Frame → photo": save a single frame as PNG, BMP, TIFF or lossless WebP.
+- "Render all" saves the computed video in InkReel's own lossless .ikr file.
 - Opens common video formats, GIF, APNG, animated WebP and photos including HEIC, AVIF, TIFF and PSD.
-- Own .ikr format: "Render all" saves the computed video losslessly and lock mode opens it with no recomputation; "Normal mode" returns to the original with the already computed frames kept.
-- Uses hardware video encoders (NVIDIA, AMD, Intel) and all processor cores for export.
-- Ukrainian and English interface.
-- Works offline. No account, no ads, no tracking.
+- Sizes from 144p to the source size, your own width and height, or "Auto" for real-time playback.
+- Drag and drop a file onto the window. Ukrainian and English interface.
 
 ## Search terms
 
@@ -61,6 +64,22 @@ dither
 halftone
 video to gif
 pixel art
+
+## What's new
+
+(leave empty for the first release, 1.0.0)
+
+## Screenshot captions
+
+Files are in store/listing_assets/screenshots, the en_* set. One caption per screenshot, in this order.
+
+1. Engraving: every pixel is ink or paper, and the strokes follow the shapes of the picture.
+2. IRNM1, InkReel's own neural network, on a lake at dawn. Palette: Ink & paper.
+3. The Drawing level with the Cyanotype palette: strokes, dots and grain chosen by what is in the picture.
+4. Halftone with the Sepia palette: the tones are made of noise, like in a newspaper.
+5. Symbols mode: the frame is built from monospaced font characters. Palette: Terminal.
+6. The Outline level with the Carmine palette, on dunes seen from above.
+7. IRNM1 with the Amber palette. 20 two-colour palettes, and one click turns any of them inside out.
 
 ## Notes for certification
 

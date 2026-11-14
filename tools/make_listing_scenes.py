@@ -1,8 +1,9 @@
-"""Source pictures for the Microsoft Store screenshots and art: six procedurally drawn scenes (our own, no third-party photos).
+"""Source pictures for the Microsoft Store screenshots and art: seven procedurally drawn scenes (our own, no third-party photos).
 
     python tools/make_listing_scenes.py          ->  store/listing_assets/scenes/*.png  (1920x1080, grayscale)
 
-Each scene is built to show something InkReel is good at: soft skies, haze, glitter, hard shadows, foliage, rippled water, fine texture.
+Each scene is built to show something InkReel is good at: soft skies, haze, glitter, hard shadows, foliage, rippled water, fine texture,
+and a moonlit sea with a Milky Way (07, the frame of the Store hero).
 """
 from __future__ import annotations
 
@@ -495,8 +496,177 @@ def dunes() -> None:
     finish(img, "06_dunes_aerial", grain=0.011)
 
 
+# ---------------------------------------------------------------------------------------------------------------- 7. crescent over the sea (the cinematic frame)
+def _star_field(hor: int, band: np.ndarray) -> np.ndarray:
+    """dense small stars, thicker inside the galactic band, a few bright ones with a glow and a glint"""
+    rs = np.random.RandomState(9)
+    sky = 1 - smooth(hor * 0.5, hor * 0.97, YY)
+    dens = (0.0022 + 0.0085 * band ** 1.5) * sky
+    pts = rs.rand(H, W) < dens
+    mag = rs.rand(H, W) ** 3.4
+    st = np.where(pts, 0.32 + 0.68 * mag, 0).astype(np.float32)
+    img = blur(st * 2.2, 0.5)
+    ys, xs = np.nonzero(pts & (mag > 0.86))
+    for y, x in zip(ys, xs):
+        if y < 12 or x < 12 or y > hor - 40 or x > W - 13:
+            continue
+        r = 1.4 + 1.8 * float(mag[y, x])
+        g = np.exp(-(((XX[y - 11:y + 12, x - 11:x + 12] - x) ** 2 + (YY[y - 11:y + 12, x - 11:x + 12] - y) ** 2) / (r * r)))
+        img[y - 11:y + 12, x - 11:x + 12] += 0.45 * g
+        if mag[y, x] > 0.975:                                      # the brightest get a small cross
+            ln = int(5 + 9 * mag[y, x])
+            img[y, max(0, x - ln):x + ln + 1] += 0.3
+            img[max(0, y - ln):y + ln + 1, x] += 0.3
+    return img
+
+
+def _draw_boat(img: np.ndarray, sx: int, sy: int, s: float = 1.0) -> np.ndarray:
+    k = 3
+    pad = 200
+    w = h = int(2 * pad * k)
+    val = Image.new("L", (w, h), 0)
+    msk = Image.new("L", (w, h), 0)
+    dv, dm = ImageDraw.Draw(val), ImageDraw.Draw(msk)
+    c = pad * k
+
+    def P(x, y):
+        return (c + x * s * k, c + y * s * k)
+    # hull: a curved dark shape with a slight sheer
+    hull = [P(-52, -4), P(-40, 9), P(-8, 14), P(34, 11), P(56, -6), P(30, -2), P(-12, -2)]
+    dm.polygon(hull, fill=255)
+    dv.polygon(hull, fill=8)
+    # main sail (lit), jib (a little darker)
+    main = [P(3, -6), P(3, -118), P(46, -10)]
+    jib = [P(-4, -6), P(-4, -92), P(-46, -9)]
+    dm.polygon(main, fill=255)
+    dm.polygon(jib, fill=255)
+    dv.polygon(main, fill=150)
+    dv.polygon(jib, fill=96)
+    dm.line([P(0, -6), P(0, -130)], fill=255, width=int(2.4 * k * s))          # mast
+    dv.line([P(0, -6), P(0, -130)], fill=6, width=int(2.4 * k * s))
+    dm.polygon([P(0, -130), P(0, -122), P(16, -127)], fill=255)                  # pennant
+    dv.polygon([P(0, -130), P(0, -122), P(16, -127)], fill=10)
+    dm.line([P(-52, -4), P(3, -6)], fill=255, width=int(2 * k * s))               # boom / deck line
+    dv.line([P(-52, -4), P(3, -6)], fill=10, width=int(2 * k * s))
+    val = val.resize((w // k, h // k), Image.LANCZOS)
+    msk = msk.resize((w // k, h // k), Image.LANCZOS)
+    v = np.asarray(val).astype(np.float32) / 255
+    m = np.asarray(msk).astype(np.float32) / 255
+    # shade the sails: brighter toward the moon (right) and toward the top, a seam or two
+    hh, ww = v.shape
+    gy, gx = np.mgrid[0:hh, 0:ww].astype(np.float32)
+    lit = 0.78 + 0.42 * np.clip((gx - ww / 2) / (46 * s) , -1, 1) * 0.5 - 0.22 * np.clip((gy - hh / 2) / (120 * s), -1, 1)
+    sail = (v > 0.2).astype(np.float32)
+    v = np.where(sail > 0, v * lit, v)
+    seam = 0.85 + 0.15 * np.sin((gy - hh / 2) / (7 * s) + 1.7)
+    v = np.where(sail > 0, v * seam, v)
+    # paste into the frame
+    x0, y0 = sx - ww // 2, sy - hh // 2
+    sub = (slice(max(0, y0), min(H, y0 + hh)), slice(max(0, x0), min(W, x0 + ww)))
+    sv = (slice(sub[0].start - y0, sub[0].stop - y0), slice(sub[1].start - x0, sub[1].stop - x0))
+    out = img.copy()
+    out[sub] = out[sub] * (1 - m[sv]) + v[sv] * m[sv]
+    # the boat in the water: a stretched, broken, dimmer mirror
+    mir_v, mir_m = v[::-1], m[::-1]
+    yy = np.arange(hh)
+    for i in range(0, 90, 1):
+        yd = sy + 6 + i
+        if yd >= H:
+            break
+        src = int(hh / 2 + 6 - 1 - i * 1.1)
+        if src < 0 or src >= hh:
+            continue
+        row_m = m[::-1][hh - 1 - src] if False else m[src]
+        row_v = v[src]
+        fade = (1 - i / 95.0) ** 1.4
+        wob = int(3 * np.sin(i * 0.9 + 1.0 * (i % 7)))
+        xs0 = x0 + wob
+        a, b = max(0, xs0), min(W, xs0 + ww)
+        if b <= a:
+            continue
+        mm = row_m[a - xs0:b - xs0] * fade * (0.55 + 0.45 * np.sin(i * 1.9) ** 2)
+        out[yd, a:b] = out[yd, a:b] * (1 - mm) + row_v[a - xs0:b - xs0] * mm * 0.9
+    return out
+
+
+def crescent() -> None:
+    """a wide, low-key frame: a crescent moon with its faint dark limb, a Milky Way across dense stars, a fine swell with a broken
+    glitter path and one small sloop on it. Composed for a 2.39:1 window (rows ~138..942); the 16:9 sheet around it is dark."""
+    hor = 650
+    # galactic band: a diagonal from upper left down to the horizon right of centre, with dust lanes in it
+    p0x, p0y, p1x, p1y = 40.0, 230.0, 1300.0, 650.0
+    ln = float(np.hypot(p1x - p0x, p1y - p0y))
+    dist = ((XX - p0x) * (p1y - p0y) - (YY - p0y) * (p1x - p0x)) / ln
+    along = ((XX - p0x) * (p1x - p0x) + (YY - p0y) * (p1y - p0y)) / ln / ln
+    width = 150 + 90 * smooth(0, 1, along)
+    band = np.exp(-(dist / width) ** 2)
+    mw_n = fbm(H, W, 210, base=7, octaves=7, stretch=1.6)
+    lanes = smooth(0.52, 0.72, fbm(H, W, 211, base=4, octaves=5, stretch=2.2))
+    core = np.exp(-(dist / (width * 0.42)) ** 2)
+    milky = band * (0.35 + 0.9 * mw_n) * (1 - 0.8 * lanes * band) + 0.5 * core * mw_n
+    sky = 0.014 + 0.022 * smooth(0, hor, YY) + 0.16 * smooth(hor * 0.45, hor, YY) ** 2.2
+    img = sky + 0.24 * milky * (1 - 0.4 * smooth(hor - 160, hor, YY))
+    img += _star_field(hor, band + 0.5 * core)
+    # the moon: a lit crescent with surface, the rest of the disc faintly there (earthshine)
+    mx, my, mr = 1345, 318, 132
+    d = np.hypot(XX - mx, YY - my)
+    disc = smooth(mr + 1.2, mr - 1.2, d)
+    d2 = np.hypot(XX - (mx + 84), YY - (my - 36))
+    cut = smooth(mr - 3.0, mr + 0.6, d2)
+    cres = disc * cut
+    tex = fbm(H, W, 300, base=14, octaves=5)
+    maria = smooth(0.42, 0.62, fbm(H, W, 301, base=4, octaves=4))
+    limb = 0.82 + 0.3 * smooth(mr - 46, mr, d)
+    surf = (0.66 + 0.42 * tex - 0.30 * maria) * limb
+    craters = np.zeros((H, W), np.float32)
+    rc = np.random.RandomState(302)
+    for _ in range(70):
+        a = rc.rand() * 6.28
+        rr = (0.12 + 0.88 * rc.rand()) * mr * 0.95
+        cx, cy = mx + rr * np.cos(a), my + rr * np.sin(a)
+        cr = 3 + 9 * rc.rand() ** 1.8
+        dd = np.hypot(XX[int(max(0, cy - 30)):int(cy + 30), int(max(0, cx - 30)):int(cx + 30)] - cx,
+                      YY[int(max(0, cy - 30)):int(cy + 30), int(max(0, cx - 30)):int(cx + 30)] - cy)
+        sl = (slice(int(max(0, cy - 30)), int(cy + 30)), slice(int(max(0, cx - 30)), int(cx + 30)))
+        craters[sl] += -0.26 * np.exp(-(dd / (cr * 0.8)) ** 2) + 0.10 * np.exp(-((dd - cr * 1.15) / 2.4) ** 2)
+    surf = np.clip(surf + craters, 0.2, 1.05)
+    ear = disc * (1 - cres) * (0.036 + 0.024 * tex)
+    rim = np.exp(-((d - mr) / 1.8) ** 2) * 0.10 * (1 - cres)
+    img = img * (1 - disc) + ear + rim + cres * surf * 0.97 + img * disc * 0.2 * (1 - cres)
+    dg = np.hypot(XX - (mx - 52), YY - (my + 24))
+    img += 0.22 * np.exp(-(dg / 150) ** 2) + 0.09 * np.exp(-(dg / 520) ** 2) + 0.035 * np.exp(-(dg / 1100) ** 2)
+    # sea: two swells of growing spacing, ripples, the sky's glow in it, the moon's glitter
+    rows = (YY - hor).clip(0, None)
+    wave = fbm(H, W, 205, base=8, octaves=4, stretch=7)
+    wave2 = fbm(H, W, 207, base=14, octaves=4, stretch=9)
+    ph1 = 104.7 * np.log1p(0.02 * rows)
+    ph2 = 17.95 * np.log1p(0.0175 * rows)
+    rip = 0.5 + 0.5 * np.sin(ph1 + 9 * (wave2 - 0.5) + 0.9 * np.sin(XX / (50 + rows * 0.7) + ph1 * 0.25))
+    swl = 0.5 + 0.5 * np.sin(ph2 + 3.2 * (wave - 0.5) + 1.1 * np.sin(XX / (230 + rows * 1.2) + ph2 * 0.3))
+    crest = 0.35 * rip + 0.65 * swl
+    near = smooth(0, 290, rows)
+    refl = 0.115 + 0.12 * np.exp(-rows / 90.0) + 0.07 * np.exp(-(((XX - 900) / 700) ** 2)) * np.exp(-rows / 220.0)
+    sea_img = refl * (0.25 + 1.5 * crest) * (1 - 0.3 * near)
+    spec_w = 24 + rows * 0.55
+    dash = smooth(0.34, 0.68, fbm(H, W, 206, base=5, octaves=3, stretch=16))
+    gx0 = mx - 60 + (wave - 0.5) * 150 * (1 - near * 0.4)
+    glit = np.exp(-(((XX - gx0) / spec_w) ** 2)) * (0.25 + 0.75 * dash)
+    bright = glit * smooth(0.40, 0.82, 0.5 * rip + 0.5 * swl) * (0.5 + 0.5 * swl)
+    halo = 0.14 * np.exp(-(((XX - (mx - 60)) / (200 + rows * 1.2)) ** 2)) * crest * np.exp(-rows / 380.0)
+    sea_img = sea_img + 0.95 * bright + halo + 0.05 * band * crest * np.exp(-rows / 120.0)
+    img = np.where(YY >= hor, sea_img, img)
+    img[hor - 1:hor + 2] = blur(img, 1.0)[hor - 1:hor + 2]
+    img += 0.12 * np.exp(-(((YY - hor) / 9) ** 2)) * (0.4 + 0.6 * np.exp(-(((XX - (mx - 60)) / 700) ** 2)))
+    # the sloop, in the path of light
+    img = _draw_boat(img, 1195, 666, 1.45)
+    # vignette
+    v = np.hypot((XX - W / 2) / (W / 2), (YY - H / 2) / (H / 2))
+    img *= 1 - 0.5 * smooth(0.45, 1.3, v)
+    finish(img, "07_crescent_sea", grain=0.012)
+
+
 def main() -> int:
-    for fn in (lake, city, still, oak, sea, dunes):
+    for fn in (lake, city, still, oak, sea, dunes, crescent):
         fn()
     return 0
 
