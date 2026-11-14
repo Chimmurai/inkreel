@@ -29,6 +29,8 @@ class PlayerMixin:
         """інтерфейс під тип файлу: відео - повний, GIF - без параметрів кодека, фото - без часової шкали"""
         self.kind = kind
         self._fill_formats()
+        self.sec_exp.setVisible(True)                     # до першого файла секція «Експорт» схована
+        self.side_in.layout().setStretch(self._side_tail, 0)
         vid = kind == "video"
         for w in (self.row2, self.row_fps, self.btn_lock):
             w.setVisible(vid)

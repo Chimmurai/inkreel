@@ -462,6 +462,10 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, Stat
         self.prog_lbl = TkLabel(s.inner, "", dim=True, font=FONT_S, anchor="nw", lines=3, wraplength=wrap0, autowrap=True)
         self.prog_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         b.addWidget(self.prog_lbl, 1)
+        s.setVisible(False)                                   # поки файл не відкрито, експортувати нічого: секція з'являється в _apply_kind
+        lay.addStretch(0)                                     # розпірка під секціями: без експорту вільне місце лишається внизу, а не розтягує «Палітру»
+        self._side_tail = lay.count() - 1
+        lay.setStretch(self._side_tail, 1)
 
     # ------------------------------------------------------------------------------ тема й переклад
     def _pal_key(self) -> str:

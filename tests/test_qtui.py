@@ -258,6 +258,15 @@ def test_window_opens_a_picture_and_shows_the_real_engine_output(qapp, win, tmp_
     assert win.surface.mask is not None and win.surface.mask.shape[1] > 20
 
 
+def test_export_section_is_hidden_until_a_file_is_open(qapp, win, tmp_path):
+    from PIL import Image
+    assert not win.sec_exp.isVisibleTo(win), "на порожньому екрані експортувати нічого"
+    p = tmp_path / "pic.png"
+    Image.fromarray((np.random.RandomState(7).rand(60, 90) * 255).astype(np.uint8)).save(p)
+    win._open(str(p))
+    assert win.sec_exp.isVisibleTo(win) and win.btn_export2.isVisibleTo(win)
+
+
 def test_window_exports_a_photo_a_gif_and_a_video_with_progress(qapp, win, tmp_path, monkeypatch):
     """експорт на справжніх функціях двигуна: фото PNG, відео MP4 з прогресом, скасування"""
     from PIL import Image
