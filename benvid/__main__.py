@@ -23,6 +23,13 @@ def _run():
     elif a[:1] in (["--register-menu"], ["--unregister-menu"]):   # пункти меню правої кнопки без інсталятора (benvid/shellmenu.py)
         from .shellmenu import main as menu_main
         sys.exit(menu_main(a))
+    elif a[:1] == ["--qt"] or (_want_qt() and (not a or (len(a) == 1 and os.path.isfile(a[0])))):
+        # вікно на Qt: `InkReel --qt [файл]`, змінна INKREEL_UI=qt, а в бета-каналі (BETA_LABEL) воно типове
+        from .qtui.window import main as qt_main
+        sys.exit(qt_main([sys.argv[0]] + [x for x in a if x != "--qt"]))
+    elif a[:1] == ["--tk"] and (len(a) == 1 or (len(a) == 2 and os.path.isfile(a[1]))):   # запасне вікно на Tk у бета-каналі
+        from .gui import main
+        main(a[1] if len(a) == 2 else None)
     elif len(a) == 1 and os.path.isfile(a[0]):   # перетягнули файл на ярлик / "відкрити за допомогою"
         from .gui import main
         main(a[0])
@@ -32,6 +39,15 @@ def _run():
     else:
         from .gui import main
         main()
+
+
+def _want_qt() -> bool:
+    """Qt є типовим лише в бета-каналі; INKREEL_UI=tk|qt перекриває вибір."""
+    ui = os.environ.get("INKREEL_UI", "").lower()
+    if ui in ("tk", "qt"):
+        return ui == "qt"
+    from . import BETA_LABEL
+    return bool(BETA_LABEL)
 
 
 if __name__ == "__main__":  # обов'язково: на Windows дочірні процеси перезавантажують модуль

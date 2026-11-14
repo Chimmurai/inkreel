@@ -136,14 +136,22 @@ def pytest_collection_modifyitems(config, items):
 def pytest_sessionfinish(session, exitstatus):
     """після тестів із вікном у процесі лишаються пули/потоки (вікно закрите в обхід release_everything) - pytest тоді не виходить, а меню scripts\\tests.bat не повертається.
     Закриваємо пули й ставимо страховку: якщо процес не завершився за 15 с, виходимо примусово з тим самим кодом"""
-    try:
-        from benvid import video
-        video.kill_all_pools()
-    except Exception:  # noqa: BLE001
-        pass
     import threading
 
     def _force():
         time.sleep(15.0)
+        try:
+            import multiprocessing
+            for p in multiprocessing.active_children():      # os._exit не чіпає дітей: обробники пулу лишались би осиротілими (по ~230 МБ кожен) після кожного такого виходу
+                p.kill()
+        except Exception:  # noqa: BLE001
+            pass
         os._exit(int(exitstatus))
-    threading.Thread(target=_force, daemon=True, name="pytest-exit-guard").start()
+    threading.Thread(target=_force, daemon=True, name="pytest-exit-guard").start()      # СПЕРШУ страховка: зламаний пул може заблокувати й сам kill_all_pools
+    def _kill():
+        try:
+            from benvid import video
+            video.kill_all_pools()
+        except Exception:  # noqa: BLE001
+            pass
+    threading.Thread(target=_kill, daemon=True, name="pytest-kill-pools").start()      # в потоці: зламаний пул не повинен блокувати друк підсумку pytest

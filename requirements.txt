@@ -9,3 +9,4 @@ pillow-heif
 pyopencl            # необов'язково: прискорення відеокартою (OpenCL, будь-який виробник); без нього все рахується на CPU
 onnxruntime-directml; sys_platform == 'win32'   # рівень 6 «Нейро»: нейромережа на відеокарті (DirectML: NVIDIA, AMD, Intel); без неї «Нейро» рахується як «Ультра»
 onnxruntime; sys_platform != 'win32'
+PySide6-Essentials   # beta-інтерфейс на Qt (гілка beta)
