@@ -45,3 +45,25 @@ def test_tracked_text_files_do_not_mention_assistants():
         except OSError:
             continue
     assert not hits, "згадки помічників у відстежуваних файлах: " + ", ".join(hits)
+
+
+def test_shipped_pngs_carry_no_embedded_metadata():
+    """картинки, що їдуть у програму й пакет (benvid/assets, store/Assets), не мають вбудованих метаданих: ні текстових блоків, ні EXIF, ні
+    маніфестів походження (C2PA, блок caBX): у програмі лише пікселі й те, що потрібно для показу"""
+    import struct
+    bad = []
+    for p in _tracked():
+        if not p.lower().endswith(".png") or not p.startswith(("benvid/", "store/")):
+            continue
+        with open(os.path.join(ROOT, p), "rb") as f:
+            data = f.read()
+        pos = 8
+        while pos + 8 <= len(data):
+            ln, typ = struct.unpack(">I4s", data[pos:pos + 8])
+            if typ in (b"caBX", b"tEXt", b"zTXt", b"iTXt", b"eXIf", b"tIME"):
+                bad.append(f"{p}: {typ.decode('latin1')}")
+                break
+            pos += 12 + ln
+            if typ == b"IEND":
+                break
+    assert not bad, "у картинках лишились вбудовані метадані: " + "; ".join(bad[:10])
