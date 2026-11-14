@@ -234,10 +234,20 @@ def test_listing_assets_follow_the_store_rules():
     folder = os.path.join(ROOT, "store", "listing_assets")
     # велика афіша лежить готовою (tools/make_listing_art.py), розміри за правилами Store
     sizes = {"StoreBoxArt_1080x1080.png": (1080, 1080), "StoreAppTile_300x300.png": (300, 300), "SuperHeroArt_1920x1080.png": (1920, 1080),
-             "StorePosterArt_1440x2160.png": (1440, 2160)}
+             "StorePosterArt_1440x2160.png": (1440, 2160), "SuperHeroArt_3840x2160.png": (3840, 2160)}
     for name, size in sizes.items():
         with Image.open(os.path.join(folder, name)) as saved:
             assert saved.size == size
+
+
+def test_store_art_is_strictly_two_colour():
+    """афіша Store - чорнило й папір без сірого й згладжування (її малює сама програма, tools/make_listing_art.py)"""
+    import numpy as np
+    folder = os.path.join(ROOT, "store", "listing_assets")
+    for name in ("SuperHeroArt_1920x1080.png", "SuperHeroArt_3840x2160.png", "StoreBoxArt_1080x1080.png", "StorePosterArt_1440x2160.png"):
+        with Image.open(os.path.join(folder, name)) as im:
+            px = np.asarray(im.convert("L"))
+        assert set(np.unique(px)) <= {0, 255}, name
 
 
 def test_super_hero_has_no_text_baked_in_by_the_generator():
