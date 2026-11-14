@@ -1,5 +1,5 @@
-"""Головне вікно на Qt: розкладка перенесена з `benvid/gui.py` (`_build`, `_build_side`) з тими самими константами, відступами й віджетами,
-що й Tk-версія, тож вигляд 1:1 (звірка: `tools/ui_diff.py screen`).
+"""Головне вікно на Qt: розкладка перенесена з колишнього вікна на Tk (його видалено у 1.1.0) з тими самими константами, відступами й віджетами,
+тож вигляд 1:1.
 
 Стан: екран застосунку (шапка, смуги, екран кадра, права панель з чотирма секціями, перемотування й транспорт) і футер (`footer.py`) перенесено, логіка: відкриття файла,
 відтворення, перемотування, рівні, «Чорнило/Символи», розміри, палітри, мова, експорт. Решта чеклиста - у `docs/QT_PORT.md`."""
@@ -11,19 +11,18 @@ import time
 
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QApplication, QFileDialog, QGridLayout, QHBoxLayout, QMainWindow, QMessageBox, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QGridLayout, QHBoxLayout, QMainWindow, QSizePolicy, QVBoxLayout, QWidget
 
 from .. import i18n, palette
-from ..core import BRANCH, MAIN_LEVELS, METHOD_INFO, METHODS, Params
+from ..core import BRANCH, MAIN_LEVELS, Params
 from ..engine import load_settings, save_settings
 from ..i18n import tn, tr
-from ..media import GIF_EXT, GIF_FORMATS, IMAGE_EXT, still_formats
+from ..media import GIF_FORMATS, still_formats
 from ..player import Player
-from ..progress import fmt_t
-from ..video import FORMATS, QUALITY, SIZES, VIDEO_EXT, out_size
+from ..video import FORMATS, QUALITY, SIZES, out_size
 from . import assets
 from .boxes import PixCombo, PixEntry, SectionBox
-from .consts import (AUTO, BAR_H, EDGE_W, FONT, FONT_B, FONT_S, G, GG, H_L, H_M, H_S, HEAD_W, M, MIN_MAIN, SB_W, SIDE_W, TOG_W, W_SQ)
+from .consts import AUTO, EDGE_W, FONT, FONT_B, FONT_S, G, GG, H_L, H_M, H_S, HEAD_W, M, MIN_MAIN, SB_W, SIDE_W, TOG_W, W_SQ
 from .eggs_ui import EggsMixin
 from .export import ExportController
 from .filectl import FileMixin

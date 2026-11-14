@@ -1,7 +1,6 @@
 """Режим «Символи»: кадр складається зі знаків шрифту. Перевіряємо алфавіт, форму результату, тон, пам'ять кадрів, текстовий вихід
 і зв'язок із рештою програми (Params, CLI, експорт фото, вікно)."""
 import os
-import re
 import sys
 
 import cv2
@@ -471,121 +470,6 @@ def _photo(path, w=320, h=240):
         d.rectangle([i, 0, i + 7, h], fill=60 + (i * 3) % 190)
     d.ellipse([w // 2 - 70, h // 2 - 70, w // 2 + 70, h // 2 + 70], fill=235)
     im.convert("RGB").save(path)
-
-
-def test_window_switches_between_ink_and_symbols(app, tmp_path, monkeypatch):
-    from tkinter import filedialog
-
-    from conftest import pump, settle
-    from benvid import engine, media
-    p = str(tmp_path / "photo.png")
-    _photo(p)
-    app._open(p)
-    assert pump(app, lambda: app.ready and app._last_mask is not None, 60)
-    settle(app, rounds=3)
-    ink = app._last_mask.copy()
-    assert app.btn_ink.on and not app.btn_sym.on and not app.params.glyph
-    assert media.TEXT_FORMAT not in app._fmt_keys
-
-    app._set_glyph(True)
-    assert app.params.glyph and app.btn_sym.on and not app.btn_ink.on
-    assert media.TEXT_FORMAT in app._fmt_keys, "для символів у форматах фото є .txt"
-    assert pump(app, lambda: app._last_mask is not None and app._last_mask.shape == ink.shape and not (app._last_mask == ink).all(), 60), \
-        "кадр перерахувався знаками"
-    from benvid.core import GLYPH_INFO
-    from benvid.i18n import tr
-    assert app.m_info.cget("text") == tr(GLYPH_INFO[app.params.method])
-
-    out = str(tmp_path / "frame.txt")
-    monkeypatch.setattr(filedialog, "asksaveasfilename", lambda **kw: out)
-    app._save_frame()
-    txt = open(out, encoding="utf-8").read()
-    mh, mw = app._last_mask.shape
-    assert len(txt.splitlines()) == glyph.grid_for(mw, mh)[0]
-
-    app._save_now()
-    assert engine.load_settings()["ui"]["glyph"] is True
-    app._set_glyph(False)
-    assert not app.params.glyph and media.TEXT_FORMAT not in app._fmt_keys
-    app._save_now()
-    assert engine.load_settings()["ui"]["glyph"] is False
-
-
-def test_density_bar_appears_only_for_symbols_and_is_remembered(app, tmp_path):
-    from conftest import pump, settle
-    from benvid import engine
-    p = str(tmp_path / "photo.png")
-    _photo(p, 640, 360)
-    app._open(p)
-    assert pump(app, lambda: app.ready and app._last_mask is not None, 60)
-    settle(app, rounds=3)
-    assert not app.dens_box.winfo_manager(), "у «Чорнилі» повзунка щільності нема"
-    app._set_glyph(True)
-    settle(app, rounds=2)
-    assert app.dens_box.winfo_manager() == "pack" and app.dens_bar.v == app.params.gdens == 3 and app.dens_bar.n == 3
-    w, h = app.player.size
-    cw, ch = glyph.cell_for(w, h, 3)
-    assert f"{cw}×{ch}" in app.size_lbl.cget("text") and f"{cw}×{ch}" in app.dens_lbl.cget("text")
-    lines = app.dens_lbl.cget("text").splitlines()
-    assert len(lines) == 2 and all(len(x) <= 30 for x in lines), "підпис щільності - два короткі рядки, щоб не вилазив за панель"
-    before = app._last_mask.copy()
-    app._apply_gdens(1)
-    assert app.params.gdens == 1 and app.dens_bar.v == 1
-    cw3, ch3 = glyph.cell_for(w, h, 1)
-    assert (cw3, ch3) == (32, 64) and f"{cw3}×{ch3}" in app.size_lbl.cget("text")
-    assert pump(app, lambda: app._last_mask is not None and app._last_mask.shape == before.shape and not (app._last_mask == before).all(), 60), \
-        "кадр перерахувався крупнішими знаками"
-    app._save_now()
-    assert engine.load_settings()["ui"]["gdens3"] == 1
-    app._set_glyph(False)
-    assert not app.dens_box.winfo_manager()
-
-
-def test_density_label_fits_the_settings_panel(app, tmp_path):
-    """підпис над повзунком щільності не ширший за панель налаштувань на жодній позиції"""
-    from conftest import pump, settle
-    p = str(tmp_path / "photo.png")
-    _photo(p, 640, 360)
-    app._open(p)
-    assert pump(app, lambda: app.ready and app._last_mask is not None, 60)
-    app._set_glyph(True)
-    settle(app, rounds=3)
-    for d in (1, 2, 3):
-        app._apply_gdens(d)
-        settle(app, rounds=2)
-        app.update_idletasks()
-        assert app.dens_lbl.winfo_reqwidth() <= app.dens_box.winfo_width() + 1, (d, app.dens_lbl.winfo_reqwidth(), app.dens_box.winfo_width())
-
-
-def test_window_lifts_a_too_small_size_to_one_symbol_and_says_so(app, tmp_path):
-    """вікно, «Символи»: розмір менший за один знак піднімається автоматично (з повідомленням); крупність на малій картинці міняється, доки знак влазить"""
-    from conftest import pump, settle
-    p = str(tmp_path / "tiny.png")
-    _photo(p, 100, 60)
-    app._open(p)
-    assert pump(app, lambda: app.ready and app._last_mask is not None, 60)
-    app._set_glyph(False)
-    app._set_size("Як у джерела")
-    settle(app, rounds=2)
-    assert app.player.size == (100, 60)
-    app._set_glyph(True)
-    app._apply_gdens(3)                                              # 8x16 влазить - розмір не чіпаємо
-    settle(app, rounds=2)
-    assert app.player.size == (100, 60)
-    app._apply_gdens(2)                                              # 16x32 теж влазить: крупність справді змінилась
-    settle(app, rounds=2)
-    assert app.player.size == (100, 60) and "16×32" in app.size_lbl.cget("text")
-    app._apply_gdens(1)                                              # 32x64: 100x60 нижче за висоту клітинки - розмір піднято
-    settle(app, rounds=2)
-    w, h = app.player.size
-    assert w >= 32 and h >= 64 and abs(w / h - 100 / 60) < 0.05
-    assert "32×64" in app.size_lbl.cget("text") and "→ " + str(w) + "×" + str(h) in app.size_lbl.cget("text")
-    assert str(w) in app.prog_lbl.cget("text") and "символ" in app.prog_lbl.cget("text").lower()
-    app._apply_gdens(3)
-    settle(app, rounds=2)
-    assert app.player.size == (100, 60), "дрібніший знак - розмір знову як обрано"
-    app._set_glyph(False)
-    app._apply_gdens(3)
 
 
 # ---------------------------------------------------------------- відео: програвач і експорт

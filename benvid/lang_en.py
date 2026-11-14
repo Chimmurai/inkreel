@@ -125,6 +125,7 @@ EN: dict[str, str] = {
     "Скасовано": "Cancelled",
     "Помилка: {e}\n(деталі: {p})": "Error: {e}\n(details: {p})",
     "Обробка": "Processing",
+    "Обробка…": "Processing…",
     "Обробка й кодування": "Processing and encoding",
     "Запуск обробки": "Starting up",
     "{lab}  {pct:3.0f}%\nминуло {el}  залишилось ~{eta}": "{lab}  {pct:3.0f}%\nelapsed {el}  ~{eta} left",
@@ -185,8 +186,8 @@ EN: dict[str, str] = {
     "Код і релізи на GitHub": "Code and releases on GitHub",
     "Сторінка в Microsoft Store": "Microsoft Store page",
     "Зв'язок: {c}": "Contact: {c}",
-    "Використано: Python, Tk, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.":
-        "Built with: Python, Tk, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.",
+    "Використано: Python, Qt, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.":
+        "Built with: Python, Qt, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice.",
     "Журнал помилок: {p}": "Error log: {p}",
     "Ліцензії компонентів: THIRD_PARTY_NOTICES.md у теці програми.":
         "Component licences: THIRD_PARTY_NOTICES.md in the program folder.",
@@ -321,7 +322,6 @@ EN: dict[str, str] = {
         "Done: the whole video is computed, nothing is recomputed.\n“Normal mode” returns to the original",
     "не вдалося відкрити готовий файл .ikr": "could not open the finished .ikr file",
     "закриття: крок не вдався": "closing: a step failed",
-    "закриття: вікно не знищено": "closing: the window was not destroyed",
     "Звичайний режим: повернутись до оригіналу цього відео з тими самими налаштуваннями. Уже пораховані кадри лишаються":
         "Normal mode: return to the original of this video with the same settings. Frames already computed are kept",
     "Порахувати все: обробити все відео наперед і зберегти у файл .ikr (без втрат). Він відкриється в режимі замка - "

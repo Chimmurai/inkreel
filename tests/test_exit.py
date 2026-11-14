@@ -6,7 +6,6 @@ import sys
 import textwrap
 import threading
 import time
-from concurrent.futures import ProcessPoolExecutor
 
 import pytest
 
@@ -98,35 +97,6 @@ def test_process_with_busy_pool_exits_after_release(tmp_path):
     r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0 and "main done" in r.stdout
     assert time.time() - t0 < 30
-
-
-def test_deliver_confirms_only_when_the_window_handles_it(monkeypatch):
-    """повторний запуск отримує «OK», лише коли головний цикл вікна справді показав файл (див. gui._deliver)"""
-    from conftest import NO_SCREEN, pump
-    if NO_SCREEN:
-        pytest.skip("немає екрана (запускай під xvfb-run)")
-    import queue
-    from benvid import gui
-
-    class FakeApp:
-        def __init__(self):
-            self.q, self.got = queue.Queue(), []
-
-        def bring_front(self, p=""):
-            self.got.append(p)
-    app = FakeApp()
-    out = []
-    th = threading.Thread(target=lambda: out.append(gui._deliver(app, "a.mp4", 5.0)))
-    th.start()
-    end = time.time() + 5
-    while th.is_alive() and time.time() < end:                 # «головний цикл»: виконує чергу
-        try:
-            app.q.get(timeout=0.05)()
-        except queue.Empty:
-            pass
-    th.join(2)
-    assert out == [True] and app.got == ["a.mp4"]
-    assert gui._deliver(app, "b.mp4", 0.2) is False            # цикл не крутиться (вікно закрите/зависло) - підтвердження нема
 
 
 def test_kill_pool_from_a_done_callback_of_a_broken_pool_does_not_hang_the_process():

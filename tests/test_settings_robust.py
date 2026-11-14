@@ -4,12 +4,9 @@ import json
 import os
 import sys
 
-import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from conftest import NO_SCREEN, settle  # noqa: E402
-
 from benvid import engine  # noqa: E402
 
 JUNK_UI = {"volume": "голосно", "method": "x", "gdens3": None, "size": 123, "fps": "abc", "palette": 5, "pal_inv": "ні", "fmt": 7, "quality": [],
@@ -43,36 +40,6 @@ def test_saving_leaves_no_temp_file_and_is_readable(tmp_path, monkeypatch):
     engine.save_settings({"ui": {"lang": "uk", "fps": 24.0}})
     assert json.loads(p.read_text(encoding="utf-8"))["ui"]["fps"] == 24.0
     assert not (tmp_path / "s.json.tmp").exists()
-
-
-@pytest.mark.parametrize("name", list(CASES))
-def test_window_starts_with_any_settings_file(name, tmp_path, monkeypatch):
-    if NO_SCREEN:
-        pytest.skip("немає екрана (запускай під xvfb-run)")
-    import tkinter as tk
-
-    from benvid import gui
-    p = tmp_path / "settings.json"
-    p.write_text(CASES[name], encoding="utf-8")
-    monkeypatch.setattr(engine, "SETTINGS_FILE", str(p))
-    monkeypatch.setattr(engine, "_OLD", str(tmp_path / "old.json"))
-    try:
-        a = gui.App()
-    except tk.TclError as e:
-        pytest.skip(f"Tk недоступний: {e}")
-    try:
-        a.geometry("1100x800")
-        settle(a, rounds=4)
-        a._save_now()                                   # і збереження після такого старту працює
-        d = json.loads(p.read_text(encoding="utf-8"))
-        assert isinstance(d["ui"]["fps"], (int, float)) and 1 <= d["ui"]["method"] <= 6 and 1 <= d["ui"]["gdens3"] <= 3
-        assert 0 <= d["ui"]["volume"] <= 100
-    finally:
-        try:
-            a.player.close()
-        except Exception:  # noqa: BLE001
-            pass
-        a.destroy()
 
 
 def test_clean_ui_drops_what_the_window_cannot_use_and_keeps_the_rest():

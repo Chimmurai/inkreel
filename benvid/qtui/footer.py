@@ -7,12 +7,12 @@ from __future__ import annotations
 import webbrowser
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QGridLayout, QHBoxLayout, QMenu, QSizePolicy, QVBoxLayout
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QMenu, QSizePolicy, QVBoxLayout
 
 from .. import guide, i18n, meta
 from ..i18n import tr
 from .boxes import SectionBox
-from .consts import FONT_B, FONT_S, FOOT_GAP, G, GG, H_M, M
+from .consts import FONT_B, FONT_S, FOOT_GAP, GG, H_M, M
 from .labels import TkImage, TkLabel, TkStrip
 from .pix import PixButton
 from .theme import THEME, tk_font

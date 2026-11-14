@@ -1,10 +1,7 @@
 """InkReel: автоматичний чорно-білий обробник відео, GIF і фото."""
 from . import log as _log
 
-__version__ = "1.0.0"
-# Мітка бета-каналу (гілка beta, інтерфейс на Qt). Порожня в стабільній збірці. Три місця версії (__version__, installer.iss, CHANGELOG) не чіпає:
-# це лише підпис у «Про програму» й у назві інсталятора; Qt типовим стає саме тоді, коли мітка не порожня.
-BETA_LABEL = "1.1.0-beta.1"
+__version__ = "1.1.0"
 import multiprocessing as _mp
 import os as _os
 

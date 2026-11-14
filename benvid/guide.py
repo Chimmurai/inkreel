@@ -228,7 +228,7 @@ def about_text() -> str:
         lines.append(tr("Зв'язок: {c}", c=meta.CONTACT))
     if meta.AUTHOR or meta.SITE or meta.CONTACT:
         lines.append("")
-    lines.append(tr("Використано: Python, Tk, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice."))
+    lines.append(tr("Використано: Python, Qt, NumPy, OpenCV, Numba, Pillow, FFmpeg, sounddevice."))
     lines.append(tr("Ліцензії компонентів: THIRD_PARTY_NOTICES.md у теці програми."))
     try:
         from . import log as _log

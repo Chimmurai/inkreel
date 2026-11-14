@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
+import os
+import sys
 import time
 
 import numpy as np
@@ -53,43 +54,6 @@ def test_theme_follows_the_palette_and_emits_once(qapp):
 
 
 # ---------------------------------------------------------------- віджети
-def test_button_emits_clicked_only_inside_and_slider_reports_drag_and_release(qapp):
-    from benvid.qtui.widgets import PixButton, PixSlider
-    b = PixButton("OK")
-    b.resize(100, 28)
-    b.show()
-    got = []
-    b.clicked.connect(lambda: got.append(1))
-    QTest.mouseClick(b, Qt.LeftButton, pos=QPoint(50, 14))
-    assert got == [1]
-    QTest.mousePress(b, Qt.LeftButton, pos=QPoint(50, 14))
-    QTest.mouseRelease(b, Qt.LeftButton, pos=QPoint(250, 14))                # відпустили поза кнопкою: клік не зараховується
-    assert got == [1]
-    s = PixSlider(0, 100)
-    s.resize(300, 26)
-    s.show()
-    vals, rel = [], []
-    s.valueChanged.connect(vals.append)
-    s.released.connect(rel.append)
-    QTest.mousePress(s, Qt.LeftButton, pos=QPoint(10, 13))
-    for x in range(10, 290, 20):
-        QTest.mouseMove(s, QPoint(x, 13))
-    QTest.mouseRelease(s, Qt.LeftButton, pos=QPoint(290, 13))
-    assert len(vals) > 5 and vals == sorted(vals), "значення зростають, поки тягнуть"
-    assert len(rel) == 1 and rel[0] > 90, "відпускання дає кінцеве значення один раз"
-
-
-def test_quality_bar_picks_the_nearest_circle_or_the_irnm1_diamond(qapp):
-    from benvid.qtui.widgets import QualityBar
-    q = QualityBar()
-    q.resize(300, 40)
-    q.show()
-    got = []
-    q.chosen.connect(got.append)
-    xs, dx, cy = q._centers()
-    QTest.mouseClick(q, Qt.LeftButton, pos=QPoint(int(xs[1]), int(cy)))
-    QTest.mouseClick(q, Qt.LeftButton, pos=QPoint(int(dx), int(cy)))
-    assert got == [2, 6] and q.level == 6
 
 
 # ---------------------------------------------------------------- поверхня кадра
@@ -1170,3 +1134,32 @@ def test_window_seek_slider_is_throttled(qapp, win, monkeypatch):
     assert seeks[-1] == 999
     win.ready = False
 
+
+def _settings_cases():
+    sys.path.insert(0, os.path.dirname(__file__))
+    from test_settings_robust import CASES
+    return list(CASES)
+
+
+@pytest.mark.parametrize("name", _settings_cases())
+def test_window_starts_with_any_settings_file(qapp, tmp_path, monkeypatch, name):
+    """зіпсований, чужий чи з майбутньої версії `settings.json` не заважає запуску вікна, а збереження після такого старту працює"""
+    from test_settings_robust import CASES
+    p = tmp_path / "settings.json"
+    p.write_text(CASES[name], encoding="utf-8")
+    monkeypatch.setattr(engine, "SETTINGS_FILE", str(p))
+    monkeypatch.setattr(engine, "_OLD", str(tmp_path / "old.json"))
+    from benvid.qtui.window import MainWindow
+    w = MainWindow()
+    try:
+        w.resize(1100, 800)
+        w.show()
+        spin(qapp, lambda: False, timeout=0.3)
+        w._save()
+        d = json.loads(p.read_text(encoding="utf-8"))
+        assert isinstance(d["ui"]["fps"], (int, float)) and 1 <= d["ui"]["method"] <= 6 and 1 <= d["ui"]["gdens3"] <= 3
+        assert 0 <= d["ui"]["volume"] <= 100
+    finally:
+        w.ready = False
+        w.tick.stop()
+        w.close()

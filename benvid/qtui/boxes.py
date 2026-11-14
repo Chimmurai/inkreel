@@ -1,11 +1,11 @@
 """Будівельні цеглини розкладки в стилі Tk: рамка-секція із смужкою заголовка, поле введення, випадний список (піксельні, 1:1 з виглядом Tk-версії)."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, QTimer, Qt, Signal
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QKeySequence, QPainter
-from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QSizePolicy, QVBoxLayout
 
-from .consts import BAR_H, FONT, FONT_S, H_S, M
+from .consts import BAR_H, FONT, H_S, M
 from .labels import TkLabel
 from .theme import THEME, tk_font
 from .tkcompat import Frame
@@ -42,7 +42,7 @@ class SectionBox(Frame):
 
 
 class PixEntry(QLineEdit):
-    """поле введення: плоске, рамка 1 px кольором тексту, шрифт Consolas bold, текст по центру (як tk.Entry у gui.py)"""
+    """поле введення: плоске, рамка 1 px кольором тексту, шрифт Consolas bold, текст по центру (як колись tk.Entry)"""
 
     def __init__(self, parent=None, bare=False, select="all"):
         """bare - поле без власної рамки й заввишки (всередині списку); select: при фокусі виділяти «all» чи лише «value» (після двокрапки: «Кадри: 25 к/с»)"""

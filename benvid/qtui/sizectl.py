@@ -7,13 +7,11 @@ from __future__ import annotations
 import re
 import threading
 
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from .. import glyph
-from ..core import MAIN_LEVELS
 from ..i18n import tr
-from ..video import QUALITY, fps_options, out_size, parse_fps_limit
+from ..video import fps_options, out_size, parse_fps_limit
 from .consts import AUTO
 
 

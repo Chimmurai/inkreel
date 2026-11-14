@@ -18,17 +18,6 @@ def test_version_looks_like_major_minor_patch():
     assert re.fullmatch(r"\d+\.\d+\.\d+", __version__), __version__
 
 
-def test_beta_label_matches_installer_label():
-    """мітка бета-каналу (порожня в стабільній збірці) збігається з підписом інсталятора й починається з версії"""
-    from benvid import BETA_LABEL
-    label = re.search(r'#define AppLabel "([^"]+)"', _read("installer.iss")).group(1)
-    if BETA_LABEL:
-        assert re.fullmatch(r"\d+\.\d+\.\d+-beta\.\d+", BETA_LABEL), BETA_LABEL
-        assert label == BETA_LABEL
-    else:
-        assert label == __version__
-
-
 def test_installer_has_the_same_version():
     assert re.search(r'#define AppVer "([^"]+)"', _read("installer.iss")).group(1) == __version__
 

@@ -1,4 +1,4 @@
-"""Прокрутка правої панелі (ScrollStack) і сторінка з екранів (PageStack): код перенесено з `benvid/gui.py` дослівно; працює через Tk-подібні методи
+"""Прокрутка правої панелі (ScrollStack) і сторінка з екранів (PageStack): код перенесено з колишнього вікна на Tk дослівно; працює через Tk-подібні методи
 віджетів (`place`, `winfo_*`, `after`), які дає `qtui/tkcompat.py`."""
 from __future__ import annotations
 

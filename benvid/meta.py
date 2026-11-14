@@ -2,9 +2,7 @@
 Перед релізом достатньо заповнити цей файл - нічого більше міняти не треба: порожні поля просто не показуються."""
 from __future__ import annotations
 
-from . import BETA_LABEL as _BETA, __version__ as _VER
-
-VERSION = _BETA or _VER     # у бета-каналі показуємо мітку бети, у стабільній - номер версії
+from . import __version__ as VERSION
 
 APP = "InkReel"
 AUTHOR = "Raimex"       # ім'я або нік автора

@@ -19,7 +19,8 @@ PKG = Path(__file__).resolve().parent.parent / "benvid"
 CYR = re.compile("[А-ЩЬЮЯЄІЇҐа-щьюяєіїґ]")
 
 # модулі, чиї рядки бачить користувач
-UI_MODULES = ["gui", "core", "palette", "video", "media", "audio", "player", "autosize", "eggs", "quick", "shellmenu"]
+QT_MODULES = sorted(f"qtui/{q.stem}" for q in (PKG / "qtui").glob("*.py") if q.stem not in ("__init__", "gdi_ovals"))
+UI_MODULES = QT_MODULES + ["core", "palette", "video", "media", "audio", "player", "autosize", "eggs", "quick", "shellmenu"]
 # кирилиця, якій переклад не потрібен: журнал для автора, службові порівняння, старі назви з налаштувань
 IGNORE = {
     "помилка інтерфейсу", "автовибір розміру", "не вдалося відкрити %s", "перетягування файлів недоступне",
@@ -27,6 +28,9 @@ IGNORE = {
     "встанови",                                      # префікс статусу audio, з яким порівнюємо
     "Ризограф",                                      # стара назва палітри (palette.LEGACY)
     "х",                                             # кирилична «х» у «320х180» -> латинська x
+    "^(\\d{1,5})\\s*[xXхХ×*]\\s*(\\d{1,5})$",       # регулярний вираз вставки «1920x1080» (qtui/sizectl.py)
+    "помилка такту",                                 # лише в лог-файлі
+    "м", "і", "ї",                                   # літери клавіш M і I у кириличній розкладці (qtui/playctl.py: клавіші в будь-якій розкладці)
 }
 # у цих змінних guide.py тексти вже лежать у двох мовах поруч
 GUIDE_BILINGUAL = {"PHILOSOPHY", "TAGLINE", "SLOGAN", "TIPS", "_TEXT", "KEYS"}
@@ -59,7 +63,7 @@ def _fields(text: str) -> set[str]:
 
 def _all_constants() -> set[str]:
     out: set[str] = set()
-    for p in PKG.glob("*.py"):
+    for p in list(PKG.glob("*.py")) + list((PKG / "qtui").glob("*.py")):
         if p.name == "lang_en.py":
             continue
         for n in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
@@ -82,7 +86,7 @@ def test_every_visible_string_has_english(mod):
     for n in ast.walk(tree):
         if not (isinstance(n, ast.Constant) and isinstance(n.value, str) and CYR.search(n.value)) or id(n) in skip:
             continue
-        if n.value in IGNORE or n.value.startswith("показ:"):          # «показ:» - діагностика плавності відтворення в журналі
+        if n.value in IGNORE or n.value.startswith("показ"):          # «показ:» - діагностика плавності відтворення в журналі
             continue
         if isinstance(parent.get(id(n)), ast.JoinedStr):
             fstr.append((n.lineno, n.value))

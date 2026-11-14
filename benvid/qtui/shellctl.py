@@ -9,8 +9,6 @@ import threading
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QGuiApplication, QIcon
 
-from .. import log as _log
-from ..i18n import tr
 from . import assets
 
 

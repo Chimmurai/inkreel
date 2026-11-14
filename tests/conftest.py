@@ -1,9 +1,7 @@
-"""Спільне для тестів вікна (test_layout, test_gui_behaviour): справжнє вікно InkReel на тимчасових налаштуваннях.
-Де немає екрана (Linux без DISPLAY), такі тести пропускаються:  xvfb-run -a python -m pytest tests"""
+"""Спільне для тестів: сторож зависання, мітки повільних тестів, акуратний вихід процесу pytest."""
 from __future__ import annotations
 
 import faulthandler
-import json
 import os
 import sys
 import threading
@@ -12,8 +10,6 @@ import time
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-NO_SCREEN = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
 
 try:
     HANG_S = float(os.environ.get("INKREEL_TEST_HANG_S", "900"))        # 0 - без сторожа
@@ -51,65 +47,6 @@ def _hang_guard(request):
         t.cancel()
 
 
-def settle(app, rounds=8, pause=0.05):
-    """дати вікну домалюватись і розкластись (і прибрати чергу подій)"""
-    for _ in range(rounds):
-        app.update_idletasks()
-        app.update()
-        time.sleep(pause)
-    app.sstack.layout()
-    app.pstack.layout()
-    app.update_idletasks()
-    app.update()
-
-
-def pump(app, cond, timeout=30.0, pause=0.02):
-    """крутити цикл подій, доки cond() не стане істинним (або мине timeout); -> результат cond()"""
-    end = time.time() + timeout
-    while time.time() < end:
-        app.update()
-        if cond():
-            return True
-        time.sleep(pause)
-    return bool(cond())
-
-
-@pytest.fixture(scope="module")
-def app(tmp_path_factory):
-    """вікно з білою «Класикою», мовою uk й тимчасовим файлом налаштувань (налаштування користувача не чіпаються)"""
-    if NO_SCREEN:
-        pytest.skip("немає екрана (запускай під xvfb-run)")
-    import tkinter as tk
-    from benvid import engine, gui
-
-    tmp = tmp_path_factory.mktemp("settings")
-    mp = pytest.MonkeyPatch()
-    mp.setattr(engine, "SETTINGS_FILE", str(tmp / "settings.json"))
-    mp.setattr(engine, "_OLD", str(tmp / "old.json"))
-    with open(engine.SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump({"ui": {"lang": "uk", "palette": "Класика", "pal_inv": False, "size": "Авто"}}, f)
-    try:
-        a = gui.App()
-    except tk.TclError as e:                          # немає працюючого екрана
-        mp.undo()
-        pytest.skip(f"Tk недоступний: {e}")
-    a.geometry("1280x900")
-    try:                                              # Windows: winfo_containing і клавіші працюють лише для вікна, що зверху й у фокусі (інакше його закриває консоль, з якої запущено тести)
-        a.attributes("-topmost", True)
-        a.lift()
-        a.focus_force()
-    except tk.TclError:
-        pass
-    settle(a)
-    yield a
-    try:
-        a.player.close()
-    except Exception:  # noqa: BLE001
-        pass
-    a.destroy()
-    mp.undo()
-
-
 SLOW_FILES = {"test_video.py", "test_player.py", "test_host.py", "test_glyph.py", "test_train_ink.py", "test_make_dataset.py", "test_gpu.py", "test_autosize.py",
               "test_view.py", "test_qc.py", "test_msix.py", "test_motion.py", "test_formats.py", "test_bake.py", "test_big_frame.py"}
 
@@ -120,15 +57,12 @@ def pytest_configure(config):
         _ERR_FD = os.dup(2)                                  # тут захоплення ще не ввімкнене: це справжній stderr
     except OSError:
         _ERR_FD = None
-    config.addinivalue_line("markers", "slow: експорти відео, пули процесів, навчання (хвилини); швидкий запуск: -m \"not gui and not slow\"")
-    config.addinivalue_line("markers", "gui: тест відкриває справжнє вікно InkReel (повільний; не торкайся миші й клавіатури). Швидкий запуск: -m \"not gui\"")
+    config.addinivalue_line("markers", "slow: експорти відео, пули процесів, навчання (хвилини); швидкий запуск: -m \"not slow\"")
 
 
 def pytest_collection_modifyitems(config, items):
-    """кожен тест, що користується вікном (фікстура app), автоматично отримує мітку gui"""
+    """тести повільних файлів автоматично отримують мітку slow"""
     for it in items:
-        if "app" in getattr(it, "fixturenames", ()):
-            it.add_marker(pytest.mark.gui)
         if os.path.basename(str(it.fspath)) in SLOW_FILES:
             it.add_marker(pytest.mark.slow)
 

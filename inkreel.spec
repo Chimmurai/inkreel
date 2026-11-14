@@ -4,10 +4,10 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = [("benvid/assets", "benvid/assets"), ("benvid/bluenoise128.npy", "benvid")]
 datas += collect_data_files("imageio_ffmpeg")          # ffmpeg.exe лежить у binaries/
-hidden = collect_submodules("numba", filter=lambda n: ".tests" not in n) + ["sounddevice", "windnd", "PIL.ImageGrab", "benvid.ink5",
+hidden = collect_submodules("numba", filter=lambda n: ".tests" not in n) + ["sounddevice", "PIL.ImageGrab", "benvid.ink5",
                                          "benvid.lang_en", "benvid.guide", "benvid.view", "benvid.i18n", "benvid.meta",
                                          "benvid.eggs", "benvid.quick", "benvid.shellmenu", "benvid.store", "benvid.gpu", "benvid.host", "benvid.glyph", "benvid.bake", "benvid.ikrctx", "benvid.nbcache",
-                                         # бета-інтерфейс на Qt: PySide6 і всі модулі benvid.qtui (імпортуються зсередини функцій, тож статичний аналіз їх міг би не знайти)
+                                         # інтерфейс на Qt: PySide6 і всі модулі benvid.qtui (імпортуються зсередини функцій, тож статичний аналіз їх міг би не знайти)
                                          "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"] + collect_submodules("benvid.qtui")
 binaries = []
 try:                                                    # OpenCL-прискорення: необов'язково (pyopencl + її дані)
@@ -38,7 +38,7 @@ except Exception:
 a = Analysis(
     ["inkreel_app.py"], pathex=["."], datas=datas, binaries=binaries, hiddenimports=hidden,
     excludes=["matplotlib", "scipy", "pandas", "IPython", "pytest", "PyQt5", "PyQt6", "PySide2",
-              # з PySide6 беремо лише QtCore/QtGui/QtWidgets (бета-інтерфейс); решта модулів Qt у збірку не потрібна
+              # з PySide6 беремо лише QtCore/QtGui/QtWidgets (інтерфейс); решта модулів Qt у збірку не потрібна
               "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick", "PySide6.Qt3DCore", "PySide6.QtQuick",
               "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtPdf", "PySide6.QtCharts", "PySide6.QtDataVisualization",
               "PySide6.QtSql", "PySide6.QtTest", "PySide6.QtDesigner", "PySide6.QtHelp", "PySide6.QtBluetooth", "PySide6.QtNetwork"],

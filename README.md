@@ -44,12 +44,11 @@ scripts\build_msix.bat   Microsoft Store package
 
 | Path | What is there |
 |------|---------------|
-| `benvid/` | the app (`core`, `player`, `video`, `gui`, `student/` for IRNM1) |
+| `benvid/` | the app (`core`, `player`, `video`, `qtui/` (the window), `student/` for IRNM1) |
 | `weights/` | model weights; the app ships the exported ONNX models |
 | `tests/` | tests |
 | `tools/` | dataset, training and generator scripts |
 | `store/`, `installer/` | Microsoft Store package and Inno Setup installer |
-| `docs/DEVELOPER_NOTES.md` | detailed developer notes (in Ukrainian) |
 | `CHANGELOG.md` | release notes |
 | `THIRD_PARTY_NOTICES.md`, `licenses/` | licenses of bundled components |
 

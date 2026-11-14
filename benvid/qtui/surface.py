@@ -8,14 +8,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
-from PySide6.QtGui import QImage, QPainter, QPen
+from PySide6.QtCore import QRect, Qt, Signal
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget
 
 from .. import eggs, palette, view
 from ..i18n import tr
-from . import theme
-from .theme import THEME, font
+from .theme import THEME
 
 
 def lut_for(key: str):

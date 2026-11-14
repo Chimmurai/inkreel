@@ -1,13 +1,11 @@
 """Полотно в стилі Tk поверх QPainter: ті самі виклики `create_rectangle/line/oval/polygon/text/image/arc`, `delete`, `bbox`, `tag_lower`,
-які малюють піксельні віджети InkReel у `benvid/gui.py`. Мета - вигляд 1:1: код малювання кнопок, повзунків, смужок переноситься майже дослівно,
-тож геометрія (контур по x0 і x1 включно, пунктири, товщини, центрування тексту за якорем) збігається з Tk до пікселя. Збіг перевіряє
-`tools/ui_diff.py` (попіксельне порівняння знімків Tk і Qt).
+якими малювало колишнє вікно на Tk (видалене у 1.1.0). Мета - вигляд 1:1: код малювання кнопок, повзунків, смужок переноситься майже дослівно,
+тож геометрія (контур по x0 і x1 включно, пунктири, товщини, центрування тексту за якорем) збігається з Tk до пікселя. Збіг перевірено попіксельно проти Tk.
 
 Малюємо без згладжування (як Tk). Список елементів зберігається й перемальовується в paintEvent (один прохід), тому віджет можна
 перемальовувати хоч щокадру без перебудови дерева віджетів."""
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
@@ -131,7 +129,7 @@ class TkCanvas(QWidget):
         p.setCapStyle(Qt.FlatCap)
         p.setJoinStyle(Qt.MiterJoin)
         if dash:
-            # Tk на Windows (GDI) малює будь-який dash однаково: 3 пікселі штриха й 3 проміжку при товщині 1 і 2+2 при товщині 2 (виміряно tools/ui_diff.py);
+            # Tk на Windows (GDI) малює будь-який dash однаково: 3 пікселі штриха й 3 проміжку при товщині 1 і 2+2 при товщині 2 (виміряно проти Tk);
             # одиниці пунктиру Qt - у товщинах пера, тож для товщини w потрібно (n/w, n/w)
             n = 3.0 if width <= 1 else 2.0
             p.setDashPattern([n / float(width), n / float(width)])
@@ -231,7 +229,7 @@ class TkCanvas(QWidget):
         x0, y0, x1, y1 = round(x0), round(y0), round(x1), round(y1)         # Tk округляє дробові координати
         d = int(x1 - x0)
         if d == int(y1 - y0) and (d, min(w, 2)) in OVALS:
-            # коло точно як у GDI: форма знята з Tk (tools/gen_gdi_ovals.py); Qt малює Ellipse «круглішим», і діаметр у кілька пікселів виходить іншим
+            # коло точно як у GDI: форма знята з Tk (таблиця gdi_ovals.py); Qt малює Ellipse «круглішим», і діаметр у кілька пікселів виходить іншим
             shape = OVALS[(d, min(w, 2))]
             outline = _col(o["outline"])
             for variant, color in (("all", fill if fill is not None else None), ("ring", outline)):

@@ -1,4 +1,4 @@
-"""Тонкий шар «Tk-подібних» методів для Qt-віджетів, щоб перенесену логіку прокрутки й розкладки (ScrollStack/PageStack з gui.py) можна було
+"""Тонкий шар «Tk-подібних» методів для Qt-віджетів, щоб перенесену логіку прокрутки й розкладки (ScrollStack/PageStack з колишнього вікна на Tk) можна було
 взяти дослівно: `place`, `place_forget`, `winfo_*`, `after`, `bind("<Configure>")`."""
 from __future__ import annotations
 

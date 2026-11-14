@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QAbstractItemView, QApplication, QComboBox, QLineE
 
 from ..i18n import tn, tr
 from ..progress import fmt_t
-from .consts import G, GG, M
 
 
 class Gap(QSpacerItem):

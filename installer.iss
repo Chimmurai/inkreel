@@ -1,16 +1,14 @@
 ﻿; Inno Setup: інсталятор InkReel без прав адміністратора + пункт "Відкрити за допомогою".
 ; Картинки майстра: python tools/make_installer_art.py (installer\art\*.bmp). Збірка: scripts\build_exe.bat
 #define AppName "InkReel"
-#define AppVer "1.0.0"
+#define AppVer "1.1.0"
 #define Exe "InkReel.exe"
-; підпис у вікні встановлення й «Програми та засоби»: у бета-каналі це мітка бети (benvid.BETA_LABEL), у стабільному збігається з AppVer
-#define AppLabel "1.1.0-beta.1"
 
 [Setup]
 AppId={{6B1F6C54-6F0A-4C0E-9B55-1D6C6B2F1A01}
 AppName={#AppName}
-AppVersion={#AppLabel}
-AppVerName={#AppName} {#AppLabel}
+AppVersion={#AppVer}
+AppVerName={#AppName} {#AppVer}
 AppPublisher={#AppName}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
@@ -28,7 +26,7 @@ VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} Setup
 SetupIconFile=benvid\assets\inkreel.ico
 UninstallDisplayIcon={app}\{#Exe}
-UninstallDisplayName={#AppName} {#AppLabel}
+UninstallDisplayName={#AppName} {#AppVer}
 WizardStyle=modern
 WizardSizePercent=110
 DisableWelcomePage=no
