@@ -8,7 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -56,8 +56,9 @@ class FrameSurface(QWidget):
         self._busy = False
         self._pending = False
         self._gen = 0
-        self._img: QImage | None = None
+        self._img: QImage | None = None                 # видимий шматок результату в пікселях ДЖЕРЕЛА; збільшення в _k разів - при малюванні
         self._pos = (0, 0)
+        self._k, self._crop, self._disp, self._comp_size = 1, None, (0, 0, 0, 0), (0, 0)
         self._shown = 0
         self._drag = None
         self._empty = None
@@ -108,8 +109,8 @@ class FrameSurface(QWidget):
             m = eggs.defocus(mask, lvl) if lvl > 0.004 else mask             # пасхалка: 0/1-маска стає плавними відтінками
             comp = view.compose(m, lut, cw, ch, zoom, vc)
             if comp is not None:
-                img, k, x, y, crop = comp
-                comp = (view.finish(img, k, crop), x, y)
+                img, k, x, y, crop = comp                  # збільшення в k разів робить сам Qt при малюванні (найближчий сусід, C++ без GIL): раніше np.repeat у цьому потоці
+                comp = (np.ascontiguousarray(img), k, x, y, crop)       # тримав GIL і гальмував потоки моделі IRNM1 на ~12 %
             self.composed.emit(comp, (gen, cw, ch), int((time.perf_counter() - t0) * 1000))
         self._pool.submit(work)
 
@@ -117,8 +118,10 @@ class FrameSurface(QWidget):
         self._busy = False
         gen, cw, ch = tag
         if comp is not None and gen == self._gen and (cw, ch) == (self.width(), self.height()):
-            arr, x, y = comp
-            self._img, self._pos = to_qimage(arr), (x, y)
+            arr, k, x, y, crop = comp
+            self._img, self._pos, self._k, self._crop = to_qimage(arr), (x, y), k, crop
+            self._disp = (x, y, crop[2], crop[3]) if crop else (x, y, arr.shape[1] * k, arr.shape[0] * k)
+            self._comp_size = (cw, ch)
             self.stats["compose_ms"] += ms
             if self._empty is not None:
                 self._empty.hide()
@@ -156,8 +159,10 @@ class FrameSurface(QWidget):
 
     # --------------------------------------------------------------------------------- події
     def resizeEvent(self, e):
-        self._gen += 1
-        self.rebuild_empty()
+        # результат compose приймається, лише коли розмір поля збігається з тим, для якого він рахувався (див. _on_composed), тож «покоління» тут не міняємо:
+        # інакше під час перетягування краю вікна жоден готовий кадр не встигав лягти, і картинка стояла, а потім стрибала
+        if self._img is None or self._empty is None or self._empty.isVisible():
+            self.rebuild_empty()
         self.refresh()
 
     # --------------------------------------------------------------------------------- масштаб (лише цілі кроки; логіка в view.py, як у Tk)
@@ -274,9 +279,21 @@ class FrameSurface(QWidget):
         p.fillRect(self.rect(), THEME.bg)
         if self._img is None or self.mask is None:
             return                                        # порожній екран (і HUD на ньому) малює дочірнє полотно _empty (див. rebuild_empty)
-        x, y = self._pos
-        p.drawImage(x, y, self._img)
-        self._overlay(p, with_picture=True)
+        x, y, dw, dh = self._disp
+        cw0, ch0 = self._comp_size
+        if (cw0, ch0) != (self.width(), self.height()):          # вікно міняє розмір, а новий кадр ще рахується: старий лишається по центру, а не липне до кута
+            x += (self.width() - cw0) // 2
+            y += (self.height() - ch0) // 2
+        k, crop = self._k, self._crop
+        if k == 1 and crop is None:
+            p.drawImage(x, y, self._img)
+        else:
+            p.save()
+            p.setClipRect(x, y, dw, dh)
+            ox, oy = (x - crop[0], y - crop[1]) if crop else (x, y)
+            p.drawImage(QRect(ox, oy, self._img.width() * k, self._img.height() * k), self._img)   # цілий масштаб найближчим сусідом: піксель = квадрат k×k
+            p.restore()
+        self._overlay(p, with_picture=True, disp=(x, y, dw, dh))
         self.stats["frames"] += 1
         self.stats["paint_ms"] += (time.perf_counter() - t0) * 1000
 
@@ -288,7 +305,7 @@ class FrameSurface(QWidget):
         self._cap.delete("all")
         return self._cap
 
-    def _overlay(self, p, with_picture=True):
+    def _overlay(self, p, with_picture=True, disp=(0, 0, 0, 0)):
         """усе, що Tk малював елементами полотна поверх картинки: рамка (картинка менша за поле), позначка масштабу, підпис розфокуса, HUD.
         Елементи збираємо на прихованому TkCanvas і малюємо тим самим кодом (піксель у піксель як у Tk)"""
         from .consts import FONT, M
@@ -296,9 +313,9 @@ class FrameSurface(QWidget):
         cw, ch = self.width(), self.height()
         fg, bg = THEME.fg.name(), THEME.bg.name()
         if with_picture:
-            x, y = self._pos
+            x, y, dw, dh = disp
             if x > 0 or y > 0:                           # картинка менша за поле: рамка по її краю (з проміжком 2 px) - тло збігається з кольором туші, тож без неї край зливається
-                c.create_rectangle(x - 3, y - 3, x + self._img.width() + 2, y + self._img.height() + 2, outline=fg, width=1)
+                c.create_rectangle(x - 3, y - 3, x + dw + 2, y + dh + 2, outline=fg, width=1)
             if self.zoom is not None:                    # позначка масштабу в кутку
                 t = c.create_text(cw - M - 6, M + 3, anchor="ne", fill=fg, font=FONT, text=view.label(self.zoom) + tr("   0 — вписати"))
                 bb = c.bbox(t)

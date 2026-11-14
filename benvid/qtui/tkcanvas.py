@@ -45,6 +45,7 @@ class TkCanvas(QWidget):
         self.bg = bg
         self._items: list[_Item] = []
         self._next = 1
+        self._cache, self._cache_key = None, None             # кеш-картинка намальованих елементів (див. paintEvent)
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
     # ----------------------------------------------------------------------- API елементів
@@ -52,9 +53,11 @@ class TkCanvas(QWidget):
         it = _Item(self._next, kind, tuple(float(c) for c in coords), opt, set(tags.split() if isinstance(tags, str) else (tags or ())))
         self._next += 1
         self._items.append(it)
+        self._cache = None
         return it.id
 
     def delete(self, *what):
+        self._cache = None
         if not what or "all" in what:
             self._items = []
         else:
@@ -93,6 +96,7 @@ class TkCanvas(QWidget):
         self._items.remove(its[0])
         idx = next((k for k, i in enumerate(self._items) if i.id == below), 0)
         self._items.insert(idx, its[0])
+        self._cache = None
 
     def bbox(self, item):
         for it in self._items:
@@ -159,11 +163,26 @@ class TkCanvas(QWidget):
             getattr(self, "_draw_" + it.kind)(p, it)
 
     def paintEvent(self, e):
+        """елементи малюються в кеш-картинку один раз (після змін або зміни розміру), далі кожне перемальовування - один blit: коли вікно тягнуть за край, сорок
+        віджетів лише зсуваються, і їхній Python-код малювання (текст, прямокутники) на кожен крок не виконується. Піксель у піксель те саме, що малювання напряму:
+        картинка непрозора (RGB32), як і буфер самого вікна, тож згладжування тексту таке саме"""
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            return
+        dpr = self.devicePixelRatioF()
+        key = (w, h, dpr, self.bg)
+        if self._cache is None or self._cache_key != key:
+            img = QImage(max(1, int(w * dpr)), max(1, int(h * dpr)), QImage.Format_RGB32)
+            img.setDevicePixelRatio(dpr)
+            q = QPainter(img)
+            q.setRenderHint(QPainter.Antialiasing, False)
+            q.setRenderHint(QPainter.TextAntialiasing, True)
+            q.fillRect(QRect(0, 0, w, h), QColor(self.bg))
+            self.draw_items(q)
+            q.end()
+            self._cache, self._cache_key = img, key
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, False)
-        p.setRenderHint(QPainter.TextAntialiasing, True)
-        p.fillRect(self.rect(), QColor(self.bg))
-        self.draw_items(p)
+        p.drawImage(0, 0, self._cache)
 
     def _draw_rect(self, p, it):
         x0, y0, x1, y1 = it.coords

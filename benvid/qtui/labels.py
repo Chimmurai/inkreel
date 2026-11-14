@@ -43,7 +43,28 @@ def wrap_text(text: str, width: int, fm: QFontMetrics) -> list[str]:
     return out
 
 
-class TkLabel(QWidget):
+class _Cached:
+    """кеш-картинка намальованого вмісту: коли вікно тягнуть за край, підписи лише зсуваються, і малювання тексту на кожен крок не повторюється.
+    Піксель у піксель те саме, що малювання напряму (непрозора RGB32, ті самі налаштування пензля)"""
+
+    def _blit(self, key):
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            return
+        dpr = self.devicePixelRatioF()
+        k = (w, h, dpr, key)
+        if getattr(self, "_ck", None) != k:
+            img = QImage(max(1, int(w * dpr)), max(1, int(h * dpr)), QImage.Format_RGB32)
+            img.setDevicePixelRatio(dpr)
+            q = QPainter(img)
+            self._paint_into(q)
+            q.end()
+            self._cimg, self._ck = img, k
+        p = QPainter(self)
+        p.drawImage(0, 0, self._cimg)
+
+
+class TkLabel(_Cached, QWidget):
     """tk.Label: default bd=2, padx=pady=1; розмір = текст + 2·(bd+pad); height - у рядках (0: за текстом)"""
 
     def __init__(self, parent=None, text="", dim=False, font=FONT, anchor="center", justify="left", lines=0, wraplength=0, bd=2, padx=1, pady=1,
@@ -120,7 +141,10 @@ class TkLabel(QWidget):
             self.clicked()
 
     def paintEvent(self, e):
-        p = QPainter(self)
+        self._blit((self.text_, self.wrap, self.anchor, self.justify, self.lines, self.font_, self.bd, self.padx, self.pady, self.dim, self.inverted, self._fg,
+                    THEME.bg.rgb(), THEME.fg.rgb(), THEME.dim.rgb()))
+
+    def _paint_into(self, p):
         bg = THEME.fg if self.inverted else THEME.bg
         fg = THEME.bg if self.inverted else (THEME.dim if self.dim else THEME.fg)
         if self._fg is not None:
@@ -186,7 +210,7 @@ class TkImage(QWidget):
             p.drawImage((self.width() - im.width()) // 2, (self.height() - im.height()) // 2, im)
 
 
-class TkStrip(QWidget):
+class TkStrip(_Cached, QWidget):
     """смуга з плиток (дитер, плівка): плитка тайлиться на всю ширину, неповні плитки порівну з обох країв (як App._tile_strip)"""
 
     def __init__(self, parent=None, which="dither_light", height=8):
@@ -198,7 +222,9 @@ class TkStrip(QWidget):
         THEME.changed.connect(self.update)
 
     def paintEvent(self, e):
-        p = QPainter(self)
+        self._blit((self.which, self.h, THEME.bg.rgb(), THEME.fg.rgb()))
+
+    def _paint_into(self, p):
         p.fillRect(self.rect(), THEME.bg)
         tile = assets.img(self.which)
         if tile is None:

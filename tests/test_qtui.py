@@ -111,6 +111,112 @@ def test_surface_composes_off_the_ui_thread_and_zooms_by_whole_steps(qapp):
     assert spin(qapp, lambda: s._img is not None and s._img.width() != before or s._img.width() == 640)
 
 
+def test_surface_scales_by_whole_steps_in_qt_exactly_like_numpy_repeat_also_when_panned_and_cropped(qapp):
+    from benvid.qtui.surface import FrameSurface
+    rng = np.random.RandomState(21)
+    mask = (rng.rand(90, 160) > 0.5).astype(np.uint8)
+    s = FrameSurface()
+    s.resize(640, 400)
+    s.show()
+    s.set_mask(mask)
+    assert spin(qapp, lambda: s._img is not None)
+
+    def check():
+        spin(qapp, lambda: not s._busy and not s._pending, timeout=5)
+        spin(qapp, lambda: False, timeout=0.05)
+        comp = view.compose(mask, None, s.width(), s.height(), s.zoom, s.vc)
+        img, k, x, y, crop = comp
+        want = view.finish(img, k, crop)
+        got = s.grab().toImage().convertToFormat(__import__("PySide6.QtGui", fromlist=["QImage"]).QImage.Format_Grayscale8)
+        gw, gh = want.shape[1], want.shape[0]
+        arr = np.frombuffer(got.constBits(), np.uint8).reshape(got.height(), got.bytesPerLine())[:, :got.width()]
+        region = arr[y:y + gh, x:x + gw].copy()
+        if s.zoom is not None:                           # у кутку - позначка масштабу
+            region[:40, 300:] = want[:40, 300:]
+        assert region.shape == want.shape and np.array_equal(region, want), (s.zoom, k, crop, int(np.abs(region.astype(int) - want).sum()))
+    check()                                              # «вписати»: цілий масштаб 4
+    s.zoom_to(10, 100, 80)                               # збільшення з обрізкою
+    check()
+    s.zoom_to(6, 600, 300)
+    s.vc = view.pan(s.width(), s.height(), 160, 90, s.zoom, s.vc, 37, -23)
+    s._gen += 1
+    s.refresh()
+    check()
+
+
+def test_canvas_and_label_paint_from_a_cache_that_is_invalidated_by_every_change(qapp):
+    from PySide6.QtGui import QColor, QImage, QPainter
+    from benvid.qtui import labels
+    from benvid.qtui.tkcanvas import TkCanvas
+    c = TkCanvas(None, bg="#000000")
+    c.resize(80, 30)
+    c.create_rectangle(2, 2, 40, 20, outline="#ffffff")
+    c.create_text(10, 8, text="Ab", fill="#ffffff", font=("Consolas", 10, "bold"), anchor="nw")
+    calls = []
+    real = c.draw_items
+    c.draw_items = lambda p: (calls.append(1), real(p))[1]
+    a = c.grab().toImage()
+    c.grab()
+    c.update()
+    c.grab()
+    assert len(calls) == 1, "повторні перемальовування - з кешу"
+    direct = QImage(80, 30, QImage.Format_RGB32)
+    q = QPainter(direct)
+    q.setRenderHint(QPainter.Antialiasing, False)
+    q.fillRect(0, 0, 80, 30, QColor("#000000"))
+    real(q)
+    q.end()
+    assert a.convertToFormat(QImage.Format_RGB32) == direct, "кеш дає ті самі пікселі, що малювання напряму"
+    c.create_rectangle(50, 5, 60, 15, fill="#ffffff")
+    b = c.grab().toImage()
+    assert len(calls) == 2 and b != a, "новий елемент скидає кеш"
+    c.resize(90, 30)
+    c.grab()
+    assert len(calls) == 3, "зміна розміру скидає кеш"
+    c.bg = "#202020"
+    c.grab()
+    assert len(calls) == 4, "інше тло скидає кеш"
+    c.delete("all")
+    c.grab()
+    assert len(calls) == 5
+
+    lb = labels.TkLabel(None, "Привіт", font=("Consolas", 10, "bold"))
+    lb.resize(120, 22)
+    img1 = lb.grab().toImage()
+    k1 = lb._ck
+    lb.grab()
+    assert lb._ck is k1 or lb._ck == k1
+    lb.config(text="Інший")
+    img2 = lb.grab().toImage()
+    assert img2 != img1 and lb._ck != k1, "новий текст - нова картинка"
+    k2 = lb._ck
+    lb.dim = True
+    lb.update()
+    img3 = lb.grab().toImage()
+    assert img3 != img2 and lb._ck != k2, "інший колір - нова картинка"
+    st = labels.TkStrip(None, "dither_light", 8)
+    st.resize(100, 8)
+    s1 = st.grab().toImage()
+    k = st._ck
+    st.resize(130, 8)
+    s2 = st.grab().toImage()
+    assert st._ck != k and s2.width() == 130 and s1 != s2
+
+
+def test_a_stale_frame_stays_centred_and_a_new_size_is_accepted_without_a_generation_bump(qapp):
+    from benvid.qtui.surface import FrameSurface
+    s = FrameSurface()
+    s.resize(640, 400)
+    s.show()
+    s.set_mask((np.random.RandomState(22).rand(90, 160) > 0.5).astype(np.uint8))
+    assert spin(qapp, lambda: s._img is not None)
+    g0 = s._gen
+    for w in (700, 760, 820, 880):
+        s.resize(w, 420)
+        spin(qapp, lambda: False, timeout=0.03)
+    assert spin(qapp, lambda: s._comp_size == (880, 420), timeout=5) and s._gen == g0, "результат для нового розміру ліг без «покоління»"
+
+
 def test_surface_recolours_with_the_palette_without_a_new_frame(qapp):
     from benvid.qtui.surface import FrameSurface
     s = FrameSurface()
