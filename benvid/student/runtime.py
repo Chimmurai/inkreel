@@ -24,9 +24,10 @@ if getattr(sys, "frozen", False) and not os.path.isdir(ASSETS):
 PROV = {"trt": "TensorrtExecutionProvider", "cuda": "CUDAExecutionProvider", "dml": "DmlExecutionProvider", "cpu": "CPUExecutionProvider"}
 ORDER = ("trt", "cuda", "dml")                      # сходи запуску: від найшвидшого до найпростішого; процесор - останній (завжди є). Кожен сходинку перевіряють: запустився? маска збігається з CPU? швидший за процесор?
 LABEL = {"trt": "TensorRT", "cuda": "CUDA", "dml": "DirectML", "cpu": "CPU"}
+DML_OPTS: dict = {}                                  # додаткові параметри DmlExecutionProvider (рядки): наприклад {"disable_metacommands": "true"}
 _lock = threading.RLock()
 _acc_lock = threading.Lock()
-_acc = dict(n=0, film=0.0, mask=0.0, wait=0.0, run=0.0, t0=time.perf_counter(), size=(0, 0))
+_acc = dict(n=0, film=0.0, mask=0.0, wait=0.0, run=0.0, bind=0.0, exec=0.0, copy=0.0, t0=time.perf_counter(), size=(0, 0))
 
 
 def _note(**kw):
@@ -45,8 +46,8 @@ def stats_take() -> dict | None:
         out = None
         if n:
             out = dict(n=n, fps=n / max(dt, 1e-6), film=_acc["film"] / n * 1000, mask=_acc["mask"] / n * 1000, wait=_acc["wait"] / n * 1000,
-                       run=_acc["run"] / n * 1000, size=_acc["size"])
-        _acc.update(n=0, film=0.0, mask=0.0, wait=0.0, run=0.0, t0=time.perf_counter())
+                       run=_acc["run"] / n * 1000, bind=_acc["bind"] / n * 1000, exec=_acc["exec"] / n * 1000, copy=_acc["copy"] / n * 1000, size=_acc["size"])
+        _acc.update(n=0, film=0.0, mask=0.0, wait=0.0, run=0.0, bind=0.0, exec=0.0, copy=0.0, t0=time.perf_counter())
         return out
 
 
@@ -125,18 +126,68 @@ STAB_T = 6                                           # піксель «неру
 STAB_N = 2                                           # скільки попередніх кадрів усереднюється з поточним на нерухомих ділянках
 
 
-def _stabilise(cur: np.ndarray, gcur: np.ndarray, hist: list) -> np.ndarray:
-    """нерухомі ділянки кадру -> середнє з поточного й попередніх (шум стиснення зникає, а з ним і перемикання пікселів біля порогу); рух лишається як є"""
+_TLS = threading.local()
+CV_THREADS = 2                                      # потоків OpenCV у цьому процесі, коли працює IRNM1: див. _tune_cv
+_cv_tuned = False
+
+
+def _tune_cv() -> None:
+    """IRNM1 рахується в процесі програми кількома потоками подачі кадрів (стабілізація, опис, доповнення), а OpenCV за замовчуванням ділить кожну свою дію
+    між усіма ядрами (28 на ПК розробника): потоки подачі й потік, що тримає відеокарту, змагаються за ядра й кеш, а самі ці дії (проходи по 2-6 МБ)
+    від паралелізму майже не швидшають. Виміряно на 1080p: 71,5 -> 74,5 к/с при двох потоках OpenCV проти 28. Обробники пулу вже ставлять 1"""
+    global _cv_tuned
+    if _cv_tuned:
+        return
+    _cv_tuned = True
+    try:
+        if cv2.getNumThreads() > CV_THREADS:
+            cv2.setNumThreads(CV_THREADS)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _stabilise(cur: np.ndarray, gcur: np.ndarray, hist: list, sc: dict | None = None) -> np.ndarray:
+    """нерухомі ділянки кадру -> середнє з поточного й попередніх (шум стиснення зникає, а з ним і перемикання пікселів біля порогу); рух лишається як є.
+    sc - робочі буфери (їх тримає FilmState): без них кожен кадр виділяв би ~20 МБ нових сторінок пам'яті, а це чверть часу стабілізації"""
+    if sc is None:
+        sc = {}
+    if sc.get("shape") != cur.shape:
+        sc.clear()
+        sc.update(shape=cur.shape, g=np.empty(gcur.shape, np.uint8), d=np.empty(gcur.shape, np.uint8), s=np.empty(gcur.shape, np.uint8),
+                  m=[np.empty(cur.shape, np.uint8), np.empty(cur.shape, np.uint8)])
     g = None
     for _, gp in hist:
-        d = cv2.absdiff(gcur, gp)
-        g = d if g is None else cv2.max(g, d)
+        if g is None:
+            g = cv2.absdiff(gcur, gp, dst=sc["g"])
+        else:
+            cv2.max(g, cv2.absdiff(gcur, gp, dst=sc["d"]), dst=g)
     m = cur
-    for i, (f, _) in enumerate(reversed(hist), 1):
-        m = cv2.addWeighted(m, i / (i + 1), f, 1 / (i + 1), 0)
-    static = cv2.threshold(g, STAB_T, 255, cv2.THRESH_BINARY_INV)[1]
+    for k, (f, _) in enumerate(reversed(hist), 1):
+        m = cv2.addWeighted(m, k / (k + 1), f, 1 / (k + 1), 0, dst=sc["m"][(k - 1) % 2])      # приймач завжди інший за джерело m
+    static = cv2.threshold(g, STAB_T, 255, cv2.THRESH_BINARY_INV, dst=sc["s"])[1]
     out = cur.copy()
     cv2.copyTo(m, static, out)
+    return out
+
+
+def _pad16(bgr: np.ndarray) -> np.ndarray:
+    """кадр, доповнений віддзеркаленням (як cv2.BORDER_REFLECT_101) до кратних 16 знизу й справа. cv2.copyMakeBorder тут коштував 1 мс на 1080p
+    (проходить усі 6 МБ і міряє кожен рядок), а потрібно лише 8 нових рядків"""
+    h, w = bgr.shape[:2]
+    ph, pw = (-h) % 16, (-w) % 16
+    if not (ph or pw):
+        return bgr
+    if min(h, w) < 32:                                # відбиття ширше за кадр: рідкісний шлях, лишаємо перевірений cv2
+        return cv2.copyMakeBorder(bgr, 0, ph, 0, pw, cv2.BORDER_REFLECT_101)
+    shape = (h + ph, w + pw, bgr.shape[2])
+    out = getattr(_TLS, "pad", None)                  # буфер свого потоку: живе до кінця виклику моделі (mask повертає лише після запуску), нові сторінки пам'яті щокадру не потрібні
+    if out is None or out.shape != shape or out.dtype != bgr.dtype:
+        out = _TLS.pad = np.empty(shape, bgr.dtype)
+    out[:h, :w] = bgr
+    if pw:
+        out[:h, w:] = bgr[:, w - 2:w - 2 - pw:-1]       # колонка w+i = колонка w-2-i (REFLECT_101: без повтору краю)
+    if ph:
+        out[h:, :] = out[h - 2:h - 2 - ph:-1, :]        # рядки беруться вже з доповненими колонками: кут відбивається за обома осями
     return out
 
 
@@ -150,6 +201,7 @@ class FilmState:
         self.film = None
         self.small = None
         self.hist: list = []                         # [(сирий BGR, сірий)] двох останніх кадрів, старіші першими
+        self.scratch: dict = {}                      # робочі буфери стабілізації (див. _stabilise); у кожного стану свої: стан рахує один потік
         self.stab = (os.environ.get("INKREEL_TSTAB", "on").lower() != "off") if stab is None else bool(stab)
 
     def stabilise(self, bgr: np.ndarray) -> np.ndarray:
@@ -160,8 +212,13 @@ class FilmState:
         h = self.hist
         if h and h[-1][0].shape != bgr.shape:
             h.clear()                                # розмір змінився: історія не стосується цього кадру
-        out = _stabilise(bgr, gray, h) if h else bgr
-        h.append((bgr.copy(), gray))                 # сирий кадр, не стабілізований: інакше результат залежав би від довгої історії
+        out = _stabilise(bgr, gray, h, self.scratch) if h else bgr
+        if len(h) >= STAB_N:                         # найстарший кадр історії випадає: його буфер (власний) приймає новий, без нового виділення 6 МБ
+            buf = h.pop(0)[0]
+            np.copyto(buf, bgr)
+        else:
+            buf = bgr.copy()
+        h.append((buf, gray))                        # сирий кадр, не стабілізований: інакше результат залежав би від довгої історії
         del h[:-STAB_N]
         return out
 
@@ -225,7 +282,7 @@ class Student:
         self.glob = ort.InferenceSession(os.path.join(ASSETS, "global.onnx"), so_g, providers=["CPUExecutionProvider"])
         prov = {"cpu": ["CPUExecutionProvider"],
                 "cuda": [("CUDAExecutionProvider", {"cudnn_conv_algo_search": "HEURISTIC"}), "CPUExecutionProvider"],
-                "dml": [("DmlExecutionProvider", {"device_id": 0}), "CPUExecutionProvider"],
+                "dml": [("DmlExecutionProvider", {"device_id": 0, **DML_OPTS}), "CPUExecutionProvider"],
                 "trt": [("TensorrtExecutionProvider", _trt_options()), "CUDAExecutionProvider", "CPUExecutionProvider"]}[backend]
         self._mk_body = lambda: ort.InferenceSession(os.path.join(ASSETS, "bodyu8_fp16.onnx" if self.fp16 else "bodyu8_fp32.onnx"), so, providers=prov)
         with _GPU:
@@ -253,8 +310,7 @@ class Student:
     def mask(self, bgr: np.ndarray, film: list) -> np.ndarray:
         """кадр іде в модель як uint8 BGR (переведення в 0..1 RGB і транспонування - на відеокарті, у самому графі): на процесорі лише доповнення до кратного 16"""
         h, w = bgr.shape[:2]
-        ph, pw = (-h) % 16, (-w) % 16
-        pad = cv2.copyMakeBorder(bgr, 0, ph, 0, pw, cv2.BORDER_REFLECT_101) if (ph or pw) else bgr
+        pad = _pad16(bgr)
         feeds = {"bgr": np.ascontiguousarray(pad)[None], **{n: f.astype(self.dt, copy=False) for n, f in zip(self.film_names, film)}}
         if self.backend in ("dml", "cuda"):
             m = self._run_bound(feeds, w, h)
@@ -316,7 +372,7 @@ class Student:
         ort = _ort()
         dev = "dml" if self.backend == "dml" else "cuda"
         t0 = time.perf_counter()
-        with _GPU, self.lock:                                 # з відеокартою (шум на пристрої, прив'язка, запуск, копія результату) - по одному потоку: DirectML не любить паралельні виклики одного сеансу;
+        with _GPU, self.lock:                       # з відеокартою (шум на пристрої, прив'язка, запуск, копія результату) - по одному потоку: DirectML не любить паралельні виклики одного сеансу;
             t1 = time.perf_counter()                          # важка підготовка кадрів (опис, доповнення) у інших потоках іде поруч, поза замком
             body = self._body_for(tuple(feeds["bgr"].shape[1:3]))
             nz = self._noise_dev.get((w, h))
@@ -336,10 +392,12 @@ class Student:
             for k, v in feeds.items():
                 b.bind_cpu_input(k, v)
             b.bind_output(body.get_outputs()[0].name, "cpu")
+            ta = time.perf_counter()
             body.run_with_iobinding(b)
+            tb = time.perf_counter()
             out = b.copy_outputs_to_cpu()[0]
             t2 = time.perf_counter()
-        _note(wait=t1 - t0, run=t2 - t1)
+        _note(wait=t1 - t0, run=t2 - t1, bind=ta - t1, exec=tb - ta, copy=t2 - tb)
         if t2 - t1 > 1.0 or t1 - t0 > 3.0:                    # рідкість: відеокарта «задумалась» (інша програма, драйвер) - залишаємо слід у журналі
             _log(f"повільний виклик на {self.backend}: {w}×{h}, очікування замка {t1 - t0:.1f} с, запуск {t2 - t1:.1f} с")
         return out
@@ -370,7 +428,7 @@ def _cache_file() -> str:
 def _key() -> str:
     ort = _ort()
     m = meta()
-    return f"v2|{getattr(ort, '__version__', '?')}|{','.join(providers_available())}|{m.get('sha', '')}"       # v2: вердикти старого способу заміру (3 повтори на 720p) відкинуто
+    return f"v3|{getattr(ort, '__version__', '?')}|{','.join(providers_available())}|{m.get('sha', '')}"       # v3: у вердикті є ще й вибір режиму DirectML (dml_opts); v2 - вердикти старого способу заміру відкинуто
 
 
 def _bench(s: Student, w: int, h: int, reps: int = 6, warm: int = 3) -> float:
@@ -389,6 +447,62 @@ def _bench(s: Student, w: int, h: int, reps: int = 6, warm: int = 3) -> float:
 
 
 GPU_WINS = 0.85                                      # відеокарта береться, якщо її час менший за 85 % часу процесора (на 1080p реальний виграш - у 3-6 разів)
+DML_VARIANTS = ({"disable_metacommands": "true"},)   # режими DirectML, що пробуються після стандартного; береться швидший (різним відеокартам і драйверам пасують різні)
+DML_WINS = 0.97                                      # інший режим береться, лише якщо він швидший щонайменше на 3 %: на межі шуму лишається стандартний
+
+
+def _bench_mask(s: Student, w: int, h: int, reps: int = 6, warm: int = 3) -> float:
+    """мс на запуск самої моделі (опис кадру й стабілізація не входять): найкращий з reps повторів. Порівнювати режими DirectML за повним binarize не можна:
+    ~4 мс процесорної частини розбавляють різницю модельної вдвічі (на RTX 4060: 5 % замість 10 %), і вона тоне в шумі"""
+    rng = np.random.default_rng(1)
+    img = (rng.random((h, w, 3)) * 255).astype(np.uint8)
+    film, _ = s.film(img, h)
+    for _ in range(warm):
+        s.mask(img, film)
+    best = float("inf")
+    for _ in range(max(1, reps)):
+        t0 = time.perf_counter()
+        s.mask(img, film)
+        best = min(best, time.perf_counter() - t0)
+    return best * 1000.0
+
+
+def _pick_dml_mode(res: dict, base: Student, base_ms: float, ref_img, ref, w: int, h: int) -> float:
+    """DirectML на NVIDIA з «метакомандами» (готові ядра драйвера) у цієї мережі повільніший за загальні ядра: на RTX 4060 1080p 12,5 проти 14,0 мс (-10 %), маска
+    різниться у 0,014 % пікселів (шум fp16). На інших відеокартах може бути навпаки, тож міряємо обидва режими (саму модель) і лишаємо швидший.
+    Повертає мс повного кадру в обраному режимі; DML_OPTS виставлено під нього (звільнення програного сеансу - збирач сміття)"""
+    best, best_s = {}, None
+    tried = {}
+    try:
+        best_mask = _bench_mask(base, w, h)
+        tried[""] = round(best_mask, 1)
+    except Exception as e:  # noqa: BLE001
+        _log(f"режим DirectML: стандартний не вдалося виміряти ({e})")
+        DML_OPTS.clear()
+        res["dml_opts"], res["dml_tried"] = {}, tried
+        return base_ms
+    for opts in DML_VARIANTS:
+        key = ",".join(f"{a}={b}" for a, b in opts.items())
+        try:
+            DML_OPTS.clear()
+            DML_OPTS.update(opts)
+            s = Student("dml")
+            agree = float((s.binarize(ref_img) == ref).mean())
+            if agree < 0.97:
+                tried[key] = None
+                continue
+            ms = _bench_mask(s, w, h)
+            tried[key] = round(ms, 1)
+            if ms < best_mask * DML_WINS:
+                best, best_mask, best_s = dict(opts), ms, s
+        except Exception as e:  # noqa: BLE001
+            tried[key] = None
+            _log(f"режим DirectML {key}: не вдалося ({e})")
+    DML_OPTS.clear()
+    DML_OPTS.update(best)
+    res["dml_opts"] = dict(best)
+    res["dml_tried"] = tried
+    return round(_bench(best_s, w, h), 1) if best_s is not None else base_ms
 
 
 def probe(w: int = 1920, h: int = 1080, save: bool = True) -> dict:
@@ -419,6 +533,8 @@ def probe(w: int = 1920, h: int = 1080, save: bool = True) -> dict:
                 res["tried"][k] = f"маска відрізняється від CPU ({agree:.3f})"
                 continue
             ms = round(_bench(s, w, h), 1)
+            if k == "dml":
+                ms = _pick_dml_mode(res, s, ms, ref_img, ref, w, h)
             res["ms"][k] = ms
             if ms < best_ms * GPU_WINS:
                 best, best_ms = k, ms
@@ -463,7 +579,9 @@ def _build() -> Student | None:
         if d is None:
             d = probe()
         _state.update(backend=d["backend"], ms=d.get("ms", {}), tried=d.get("tried", {}))
-        _log(f"бекенд: {label(d['backend'])}; сходинки: {d.get('tried') or 'з кешу'}; мс: {d.get('ms')}")
+        DML_OPTS.clear()
+        DML_OPTS.update(d.get("dml_opts") or {})         # режим DirectML, обраний при вимірюванні (порожній = стандартний)
+        _log(f"бекенд: {label(d['backend'])}; сходинки: {d.get('tried') or 'з кешу'}; мс: {d.get('ms')}; режим DirectML: {DML_OPTS or 'стандартний'} {d.get('dml_tried') or ''}")
         return Student(d["backend"])
     except Exception as e:  # noqa: BLE001
         _state["reason"] = f"не вдалося запустити: {e}"
@@ -543,6 +661,7 @@ def warm(img: np.ndarray, st: FilmState | None) -> None:
     s = get()
     if s is None or st is None or min(img.shape[:2]) < I.MIN_H:
         return
+    _tune_cv()
     try:
         bgr = prepare(img, st)                       # така сама історія, як при послідовному розрахунку
         film, small = s.film(bgr, bgr.shape[0])
@@ -610,6 +729,7 @@ def binarize(img: np.ndarray, st: FilmState | None = None) -> np.ndarray | None:
     s = get()
     if s is None or min(img.shape[:2]) < I.MIN_H:
         return None
+    _tune_cv()
     if _retry["backend"]:
         _gpu_retry()
         s = get()

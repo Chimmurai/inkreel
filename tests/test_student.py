@@ -28,10 +28,12 @@ def _fresh(monkeypatch, tmp_path):
     monkeypatch.setattr("benvid.log.app_dir", lambda: str(tmp_path))
     R._inst = None
     R._state.update(backend=None, reason="", probing=False, ms={})
+    R.DML_OPTS.clear()
     I._noise_cache.clear()
     I._rings.clear()
     yield
     R._inst = None
+    R.DML_OPTS.clear()
 
 
 @pytest.mark.parametrize("w,h", [(97, 61), (320, 180), (642, 290)])
@@ -205,6 +207,116 @@ def test_input_stabiliser_does_not_depend_on_chunking_and_can_be_switched_off(mo
     monkeypatch.setenv("INKREEL_TSTAB", "off")
     off = R.FilmState()
     assert all(off.stabilise(f) is f for f in fr) and off.hist == []
+
+
+def _reference_stabilise(cur, gcur, hist):
+    """стабілізація як вона була до оптимізації (нові буфери на кожен виклик): оптимізований варіант мусить давати той самий кадр бітово"""
+    g = None
+    for _, gp in hist:
+        d = cv2.absdiff(gcur, gp)
+        g = d if g is None else cv2.max(g, d)
+    m = cur
+    for i, (f, _) in enumerate(reversed(hist), 1):
+        m = cv2.addWeighted(m, i / (i + 1), f, 1 / (i + 1), 0)
+    static = cv2.threshold(g, R.STAB_T, 255, cv2.THRESH_BINARY_INV)[1]
+    out = cur.copy()
+    cv2.copyTo(m, static, out)
+    return out
+
+
+@pytest.mark.parametrize("h,w", [(97, 131), (360, 640), (721, 1283)])
+def test_stabiliser_with_reused_buffers_is_bit_identical_to_the_plain_version(h, w):
+    rng = np.random.default_rng(7)
+    base = cv2.GaussianBlur((rng.random((h, w, 3)) * 255).astype(np.uint8), (0, 0), 3)
+    st, hist = R.FilmState(), []
+    for i in range(10):
+        f = np.clip(base.astype(np.int16) + rng.normal(0, 2 + (i % 3) * 3, base.shape).astype(np.int16), 0, 255).astype(np.uint8)
+        if i % 4 == 3:
+            f[h // 3:h // 2, w // 4:w // 2] = rng.integers(0, 255, (h // 2 - h // 3, w // 2 - w // 4, 3), dtype=np.uint8)
+        gray = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
+        want = _reference_stabilise(f, gray, hist) if hist else f
+        hist.append((f.copy(), gray))
+        del hist[:-R.STAB_N]
+        got = st.stabilise(f.copy())
+        assert np.array_equal(got, want), f"кадр {i}"
+        assert len(st.hist) <= R.STAB_N and all(x[0].flags.owndata for x in st.hist)
+
+
+def test_pad16_is_the_same_reflect101_as_cv2_and_does_not_alias_between_threads():
+    rng = np.random.default_rng(3)
+    for h, w in [(1080, 1920), (1081, 1921), (32, 32), (33, 47), (48, 400), (1440, 3440), (31, 99), (16, 16)]:
+        f = rng.integers(0, 255, (h, w, 3), dtype=np.uint8)
+        ph, pw = (-h) % 16, (-w) % 16
+        want = cv2.copyMakeBorder(f, 0, ph, 0, pw, cv2.BORDER_REFLECT_101) if (ph or pw) else f
+        assert np.array_equal(R._pad16(f), want), (h, w)
+    f = rng.integers(0, 255, (70, 70, 3), dtype=np.uint8)
+    mine = R._pad16(f).copy()
+    box = {}
+    t = threading.Thread(target=lambda: box.setdefault("o", R._pad16(np.zeros_like(f)).copy()))
+    t.start()
+    t.join()
+    assert np.array_equal(R._pad16(f), mine) and box["o"].max() == 0          # буфер доповнення в кожного потоку свій
+
+
+def test_opencv_thread_count_is_lowered_once_for_the_neuro_level(monkeypatch):
+    calls = []
+    monkeypatch.setattr(R, "_cv_tuned", False)
+    monkeypatch.setattr(cv2, "getNumThreads", lambda: 28)
+    monkeypatch.setattr(cv2, "setNumThreads", lambda n: calls.append(n))
+    R._tune_cv()
+    R._tune_cv()
+    assert calls == [R.CV_THREADS]
+    monkeypatch.setattr(R, "_cv_tuned", False)
+    monkeypatch.setattr(cv2, "getNumThreads", lambda: 1)             # обробник пулу вже поставив 1: не підіймаємо
+    calls.clear()
+    R._tune_cv()
+    assert calls == []
+
+
+class _FakeDml:
+    """підставний сеанс DirectML: маска завжди еталонна, а «час» залежить від режиму, з яким його створено"""
+    ref = None
+
+    def __init__(self, backend, profile=False):
+        self.opts = dict(R.DML_OPTS)
+
+    def binarize(self, img, st=None):
+        return _FakeDml.ref
+
+
+@pytest.mark.parametrize("fast_variant,expect", [(True, {"disable_metacommands": "true"}), (False, {})])
+def test_probe_keeps_the_faster_directml_mode(monkeypatch, fast_variant, expect):
+    img = _img(64, 64)
+    _FakeDml.ref = np.ones((64, 64), np.uint8)
+    monkeypatch.setattr(R, "Student", _FakeDml)
+    monkeypatch.setattr(R, "_bench_mask", lambda s, w, h, reps=6, warm=3: (8.0 if fast_variant else 12.0) if s.opts else 10.0)     # сама модель
+    monkeypatch.setattr(R, "_bench", lambda s, w, h, reps=6, warm=3: 15.0 if s.opts else 20.0)                                     # повний кадр
+    res = {}
+    ms = R._pick_dml_mode(res, _FakeDml("dml"), 20.0, img, _FakeDml.ref, 64, 64)
+    assert R.DML_OPTS == expect and res["dml_opts"] == expect and ms == (15.0 if fast_variant else 20.0)
+    assert res["dml_tried"][""] == 10.0 and "disable_metacommands=true" in res["dml_tried"]
+
+
+def test_probe_ignores_a_directml_mode_that_changes_the_mask_or_fails(monkeypatch):
+    img = _img(64, 64)
+    _FakeDml.ref = np.ones((64, 64), np.uint8)
+
+    class Odd(_FakeDml):
+        def binarize(self, img, st=None):
+            return np.zeros((64, 64), np.uint8) if self.opts else _FakeDml.ref
+    monkeypatch.setattr(R, "Student", Odd)
+    monkeypatch.setattr(R, "_bench_mask", lambda s, w, h, reps=6, warm=3: 1.0 if s.opts else 10.0)
+    res = {}
+    assert R._pick_dml_mode(res, Odd("dml"), 10.0, img, _FakeDml.ref, 64, 64) == 10.0 and R.DML_OPTS == {}
+    monkeypatch.setattr(R, "Student", lambda backend, profile=False: (_ for _ in ()).throw(RuntimeError("no such option")))
+    assert R._pick_dml_mode({}, Odd("dml"), 10.0, img, _FakeDml.ref, 64, 64) == 10.0 and R.DML_OPTS == {}
+
+
+def test_cached_directml_mode_is_restored_on_start(monkeypatch):
+    monkeypatch.setenv("INKREEL_STUDENT", "auto")
+    monkeypatch.setattr(R, "_cached", lambda: {"backend": "cpu", "ms": {}, "tried": {}, "dml_opts": {"disable_metacommands": "true"}})
+    s = R._build()
+    assert s is not None and s.backend == "cpu" and R.DML_OPTS == {"disable_metacommands": "true"}
 
 
 def test_stabiliser_cuts_flicker_of_a_static_noisy_scene(monkeypatch):

@@ -1318,9 +1318,10 @@ class Player:
                     from . import log, student
                     st = student.stats_take()
                     if st and st["n"] >= 5:
-                        log.get().info("neuro: %.1f fps in the model | per frame ms: description %.1f, mask total %.1f (waiting for the GPU lock %.1f, GPU run %.1f) | "
-                                       "%dx%d | player says %.0f fps | open #%d | %s | threads %d", st["fps"], st["film"], st["mask"], st["wait"], st["run"],
-                                       st["size"][0], st["size"][1], self.render_fps(), self._src_id, student.current(), threading.active_count())
+                        log.get().info("neuro: %.1f fps in the model | per frame ms: description %.1f, mask total %.1f (waiting for the GPU lock %.1f, GPU run %.1f = bind %.1f + "
+                                       "run %.1f + copy %.1f) | %dx%d | player says %.0f fps | open #%d | %s | threads %d", st["fps"], st["film"], st["mask"], st["wait"],
+                                       st["run"], st["bind"], st["exec"], st["copy"], st["size"][0], st["size"][1], self.render_fps(), self._src_id, student.current(),
+                                       threading.active_count())
                 got = self._lock.acquire(timeout=1.0)
                 if got:
                     try:

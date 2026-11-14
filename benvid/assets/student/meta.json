@@ -2,8 +2,9 @@
  "preset": "ir1",
  "step": 1185035,
  "run": "irnm1",
- "sha": "3b33a843c836fdde",
+ "sha": "0929ee71d9d8c4a0",
  "teacher": "ink5.ultra (method=5)",
  "min_h": 48,
- "note": "best.pt EMA; студент наближає Ультра, не дорівнює йому"
+ "note": "best.pt EMA; студент наближає Ультра, не дорівнює йому",
+ "fp16_tail": "space-to-depth head (tools/opt_student_tail.py); original fp16 body: weights/student_backup/irnm1_shipped_1_1_0"
 }

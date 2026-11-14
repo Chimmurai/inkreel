@@ -49,6 +49,15 @@ def main(argv=None) -> int:
         T.main(["export", "--run", run, "--parts", "--mask", "--out", base, *extra])
         out[tag] = os.path.join(tmp, f"bodyu8_{tag}.onnx")
         add_u8_front(base, out[tag])
+        if tag == "fp16":                                             # хвіст для відеокарти без тензорів 16 x H x W (див. opt_student_tail.py); інша голова - без змін
+            try:
+                from opt_student_tail import optimize
+                slim = out[tag] + ".tail"
+                if optimize(out[tag], slim):
+                    os.replace(slim, out[tag])
+                    print("fp16: хвіст моделі переписано (SpaceToDepth + одна 1x1-згортка)")
+            except ImportError:
+                print("УВАГА: пакета onnx нема - fp16-тіло без прискорення хвоста (pip install onnx)")
     gpath = os.path.join(tmp, "body_fp32_global.onnx")
     # проста перевірка на випадковому кадрі: fp32 uint8-тіло на CPU проти PyTorch
     h, w = 128, 192
