@@ -49,17 +49,18 @@ def compose(mask: np.ndarray, lut, cw: int, ch: int, zoom: float | None, vc=CENT
     x0, x1, y0, y1 = max(0, ox), min(W, ox + cw), max(0, oy), min(H, oy + ch)
     if x1 <= x0 or y1 <= y0:
         return None
-    g8 = mask * 255 if mask.dtype == np.uint8 else (mask * 255).astype(np.uint8)
     if s >= 1:
         k = int(s)
         sx0, sx1, sy0, sy1 = x0 // k, -(-x1 // k), y0 // k, -(-y1 // k)            # які пікселі джерела видно
-        img = g8[sy0:sy1, sx0:sx1]
+        part = mask[sy0:sy1, sx0:sx1]                                              # спершу шматок, потім ×255: на 4K-кадрі видно малу частину, а множили весь
+        img = part * 255 if part.dtype == np.uint8 else (part * 255).astype(np.uint8)
         if lut is not None:
             img = cv2.applyColorMap(np.ascontiguousarray(img), lut)               # байти йдуть як у таблиці: RGB для PPM
         crop = (x0 - sx0 * k, y0 - sy0 * k, x1 - x0, y1 - y0)
         if crop == (0, 0, img.shape[1] * k, img.shape[0] * k):
             crop = None
         return img, k, max(0, -ox), max(0, -oy), crop
+    g8 = mask * 255 if mask.dtype == np.uint8 else (mask * 255).astype(np.uint8)
     img = cv2.resize(g8, (W, H), interpolation=cv2.INTER_AREA)[y0:y1, x0:x1]
     if lut is not None:
         img = cv2.applyColorMap(np.ascontiguousarray(img), lut)

@@ -108,6 +108,41 @@ def test_surface_scales_by_whole_steps_in_qt_exactly_like_numpy_repeat_also_when
     check()
 
 
+def test_dragging_a_zoomed_picture_keeps_showing_results_even_when_compose_is_slow(qapp, monkeypatch):
+    """перетягування збільшеної картинки не робить готові шматки «застарілими»: раніше кожна подія миші піднімала покоління, і коли розрахунок не встигав за
+    подіями (нейро завантажує процесор), жоден результат не лягав - картинка стояла, поки не відпустиш мишу"""
+    import time as _t
+    from PySide6.QtGui import QMouseEvent
+    from benvid.qtui.surface import FrameSurface
+    mask = (np.random.RandomState(5).rand(300, 500) > 0.5).astype(np.uint8)
+    s = FrameSurface()
+    s.resize(640, 400)
+    s.show()
+    s.set_mask(mask)
+    assert spin(qapp, lambda: s._img is not None)
+    s.zoom_to(4, 320, 200)
+    assert spin(qapp, lambda: not s._busy and not s._pending, timeout=5)
+    real = view.compose
+
+    def slow(*a, **k):
+        _t.sleep(0.05)
+        return real(*a, **k)
+    monkeypatch.setattr(view, "compose", slow)
+    mk = lambda t, x, y: QMouseEvent(t, QPointF(x, y), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    s.mousePressEvent(mk(QMouseEvent.MouseButtonPress, 300, 200))
+    gen0, shown, t0 = s._gen, [], _t.time()
+    x = 300
+    while _t.time() - t0 < 1.0:                                  # события чаще, ніж рахується (кожні 10 мс проти 50 мс)
+        x += 3
+        s.mouseMoveEvent(mk(QMouseEvent.MouseMove, x, 200))
+        spin(qapp, lambda: False, timeout=0.01)
+        shown.append((s._pos, s._crop))                          # зсув видимого шматка живе в обрізці
+    assert s._gen == gen0
+    assert len(set(shown)) > 2, "картинка мала оновлюватись під час перетягування, а не стояти"
+    monkeypatch.setattr(view, "compose", real)
+    s.mouseReleaseEvent(mk(QMouseEvent.MouseButtonRelease, x, 200))
+
+
 def test_canvas_and_label_paint_from_a_cache_that_is_invalidated_by_every_change(qapp):
     from PySide6.QtGui import QColor, QImage, QPainter
     from benvid.qtui import labels
@@ -230,6 +265,24 @@ def test_window_palette_language_and_level_controls(qapp, win):
     assert i18n.lang() == "en" and win.btn_open.text == "Open"
     win._set_lang("uk")
     assert win.btn_open.text == "Відкрити"
+
+
+def test_render_all_button_is_wired_to_the_lock_toggle(qapp, win, monkeypatch):
+    """«Порахувати все» раніше було створено з command=lambda: None і нічого не робило: тепер веде в експорт .ikr (діалог збереження), а в замку - у «Звичайний режим»"""
+    assert win.btn_lock.cmd == win._lock_toggle
+    calls = []
+    monkeypatch.setattr(win, "_export", lambda freeze=False: calls.append(("export", freeze)))
+    monkeypatch.setattr(win, "_unfreeze", lambda: calls.append(("unfreeze",)))
+    win.ready, win.kind = True, "video"
+    win.btn_lock.cmd()
+    assert calls == [("export", True)]
+    monkeypatch.setattr(type(win), "locked", property(lambda self: True))
+    win.btn_lock.cmd()
+    assert calls[-1] == ("unfreeze",)
+    win.kind = "image"                                           # на фото й GIF кнопка нічого не робить (її й не видно)
+    n = len(calls)
+    win.btn_lock.cmd()
+    assert len(calls) == n
 
 
 def test_button_pictures_follow_the_palette(qapp, win):
