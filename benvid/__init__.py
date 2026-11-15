@@ -1,7 +1,7 @@
 """InkReel: автоматичний чорно-білий обробник відео, GIF і фото."""
 from . import log as _log
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 import multiprocessing as _mp
 import os as _os
 
