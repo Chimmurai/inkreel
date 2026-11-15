@@ -449,7 +449,7 @@ class MainWindow(EggsMixin, FooterMixin, PlayerMixin, SizeMixin, FileMixin, Stat
         b.addWidget(self.btn_export2)
         self.gap_lock = Gap(0, M)
         b.addItem(self.gap_lock)
-        self.btn_lock = PixButton(s.inner, "", command=lambda: None, width=100, height=H_M)
+        self.btn_lock = PixButton(s.inner, "", command=self._lock_toggle, width=100, height=H_M)     # «Порахувати все» / «Звичайний режим» (було lambda: None - кнопка нічого не робила)
         self.btn_lock.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         b.addWidget(self.btn_lock)
         b.addSpacing(G)

@@ -300,6 +300,39 @@ def test_unsafe_numba_layer_falls_back_to_process_pool(monkeypatch):
         p.close()
 
 
+def test_filling_holes_after_sparse_mode_claims_runs_not_single_frames(tmp_path):
+    """після режиму «кожен 4-й» вільні кадри йдуть через один (2, 6, 10 …): шматок не рветься на одинокому готовому кадрі, інакше кожен кадр - окремий seek і розігрів"""
+    path = str(tmp_path / "h.mp4")
+    _clip(path, n=60)
+    p = Player(workers=2)
+    try:
+        p._alive = False
+        time.sleep(0.3)
+        p.open(path, "144p")
+        with p._lock:
+            p._have[:] = False
+            p._pend[:] = False
+            p._have[::4] = True                              # перший прохід кроком 4 готовий
+            p._stride, p._head, p._behind = 2, 0, False      # далі крок 2: вільні 2, 6, 10 …
+        a = p._claim()
+        assert a is not None and a[1][:3] == [2, 6, 10] and len(a[1]) > 3, a[1]
+        with p._lock:
+            p._have[::2] = True                              # крок 2 готовий: лишились непарні
+            p._pend[:] = False
+            p._stride, p._head = 1, 0
+        b = p._claim()
+        assert b is not None and b[1][:3] == [1, 3, 5] and len(b[1]) > 3, b[1]
+        with p._lock:                                        # два готові підряд шматок усе ж рвуть (як і раніше)
+            p._have[:] = False
+            p._pend[:] = False
+            p._have[3:5] = True
+            p._stride, p._head = 1, 1
+        c = p._claim()
+        assert c is not None and c[1] == [1, 2], c[1]
+    finally:
+        p.close()
+
+
 def test_sparse_mode_turns_off_when_buffer_is_full(tmp_path):
     """режим «кожен N-й»: коли буфер за цим кроком повний, плеєр докладає пропущені кадри й вимикає режим сам"""
     path = str(tmp_path / "s.mp4")

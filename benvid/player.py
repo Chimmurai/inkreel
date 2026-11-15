@@ -1067,7 +1067,14 @@ class Player:
             lim = 1 if urgent else self._chunk5(h - pos > 3 * self.fps) if pool5 else 64 if (self.baked or seeded) else CHUNK5 if self.params.method == 5 else CHUNK6 if self.params.method == 6 else CHUNK
             idxs = [h]
             jj = j + 1
-            while len(idxs) < lim and jj < len(ci) and not busy[ci[jj]] and (not seeded or ci[jj] < sd[3]):
+            # одинокий готовий кадр між вільними не рве шматок: при дорахуванні дірок після режиму «кожен N-й» вільні кадри йдуть через один (2, 6, 10 …),
+            # і без цього кожен ставав окремим шматком - окремий seek у декодері й окремий розігрів пам'яті (дорахування йшло в 4-6 разів повільніше за розрахунок)
+            while len(idxs) < lim and jj < len(ci) and (not seeded or ci[jj] < sd[3]):
+                if busy[ci[jj]]:
+                    if jj + 1 >= len(ci) or busy[ci[jj + 1]] or (seeded and ci[jj + 1] >= sd[3]):
+                        break
+                    jj += 1
+                    continue
                 idxs.append(int(ci[jj]))
                 jj += 1
             pre = [int(v) for v in ci[max(0, j - PRE_K):j]]       # кадри перед шматком у порядку ряду (при ліміті чи кроці проміжки нерівні)
