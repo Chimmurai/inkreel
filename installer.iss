@@ -1,7 +1,7 @@
 ﻿; Inno Setup: інсталятор InkReel без прав адміністратора + пункт "Відкрити за допомогою".
 ; Картинки майстра: python tools/make_installer_art.py (installer\art\*.bmp). Збірка: scripts\build_exe.bat
 #define AppName "InkReel"
-#define AppVer "1.1.1"
+#define AppVer "1.1.2"
 #define Exe "InkReel.exe"
 
 [Setup]
