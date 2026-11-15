@@ -444,8 +444,9 @@ def export_still(src_path, out, params: Params, size_key="Як у джерела
 
 
 def _resize(f, w, h):
+    from .core import fit_frame                                 # зменшення - INTER_AREA, велике збільшення - зі згладжуванням джерела (див. fit_frame)
     sh, sw = f.shape[:2]
-    return f if (sw, sh) == (w, h) else cv2.resize(f, (w, h), interpolation=cv2.INTER_AREA if w * h < sw * sh else cv2.INTER_CUBIC)
+    return f if (sw, sh) == (w, h) else fit_frame(f, w, h)
 
 
 def export_gif_source(src_path, out, params: Params, fmt="GIF", size_key="240p", workers=None, progress=None,

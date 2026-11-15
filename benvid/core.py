@@ -607,8 +607,7 @@ def gray_stage(img: np.ndarray, w: int, h: int, auto: bool, deband: bool = False
     deband: прибрати «східці» кодека й смуги (лише кадри від DEBAND['h0']). Від тієї ж висоти знебарвлення не розтягує
     проєкцію кольорів понад PCA_CAP (шум у рівних кадрах із титрами); нижче - усе, як було.
     tm, cut: часова пам'ять відео (ToneMem) і ознака склейки - параметри знебарвлення згладжуються між кадрами (див. _gray_pca)."""
-    shrink = img.shape[1] >= w and img.shape[0] >= h
-    img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA if shrink else cv2.INTER_CUBIC)   # спершу розмір, потім усе інше
+    img = fit_frame(img, w, h)                                                                    # спершу розмір, потім усе інше
     big = deband_active(h)
     L = _gray_pca(img, 0.5 if auto else 0.0, PCA_CAP if big else None, tm if auto else None, cut).astype(np.float32)
     return _deband(L, h) if (deband and big) else L
@@ -1459,8 +1458,7 @@ GLYPH_INFO = {
 
 
 def _gray_resized(img, w, h):
-    shrink = img.shape[1] >= w and img.shape[0] >= h
-    img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA if shrink else cv2.INTER_CUBIC)
+    img = fit_frame(img, w, h)
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
 
 
@@ -1603,9 +1601,30 @@ def neuro_warm(img: np.ndarray, w: int, h: int, film) -> None:
     student.warm(img, film)
 
 
+UP_BLUR_FROM, UP_BLUR_FULL = 1.5, 6.0          # збільшення, з якого джерело згладжується, і збільшення, на якому згладжування досягає UP_BLUR_MAX
+UP_BLUR_MAX = 1.0                               # пікселів ДЖЕРЕЛА
+
+
+def up_blur_sigma(k: float) -> float:
+    """σ згладжування (у пікселях джерела) перед збільшенням у k разів: 0 до ×1,5, плавно до 1 px на ×6 і більше"""
+    return UP_BLUR_MAX * min(1.0, max(0.0, (k - UP_BLUR_FROM) / (UP_BLUR_FULL - UP_BLUR_FROM)))
+
+
+def fit_frame(img: np.ndarray, w: int, h: int) -> np.ndarray:
+    """кадр -> w x h перед обробкою. Зменшення - усереднення (INTER_AREA). Збільшення - кубічне, але велике збільшення спершу згладжує САМЕ ДЖЕРЕЛО на його сітці:
+    інакше кожен піксель джерела (ступінчастий контур волосся, піксель текстури) стає плиткою 6 x 6 px і бінаризація малює її «кубиком» (джерело 388x363 -> 2160p:
+    контур голови з плиток, на рівнях 3-6 однаково). Тоном і деталлю, яких у джерелі нема, це не стає, але східці зникають"""
+    sh, sw = img.shape[:2]
+    if sw >= w and sh >= h:
+        return cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+    s = up_blur_sigma(max(w / sw, h / sh))
+    if s >= 0.2:                                  # слабше згладжування - майже тотожне ядро (1x1/3x3 з вагою ~0): до ×2,4 вихід бітово той самий, що й чисте INTER_CUBIC
+        img = cv2.GaussianBlur(img, (0, 0), s)
+    return cv2.resize(img, (w, h), interpolation=cv2.INTER_CUBIC)
+
+
 def _resized_bgr(img, w, h):
-    shrink = img.shape[1] >= w and img.shape[0] >= h
-    return cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA if shrink else cv2.INTER_CUBIC)
+    return fit_frame(img, w, h)
 
 
 def to_image(mask: np.ndarray) -> np.ndarray:

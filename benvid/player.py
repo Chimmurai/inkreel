@@ -1194,7 +1194,8 @@ class Player:
                                 (glyph.prime(tmp, w0, w, h, pp.auto, pp.gdens) if gly else ink5.prime(tmp, w0, w, h, pp.auto))
                                 continue
                             if w0.shape[1::-1] != (w, h):
-                                w0 = cv2.resize(w0, (w, h), interpolation=cv2.INTER_AREA)
+                                from .core import fit_frame             # як у основного кадру: розігрів не повинен рахуватись інакше за кадри шматка
+                                w0 = fit_frame(w0, w, h)
                             if gly and j < len(pre) - GLYPH_WARM:
                                 glyph.plan(w0, w, h, pp, tmp, warm_only=True)        # символи: далекі кадри розігріву - лише тон
                             elif j < len(pre) - 1 and not gly:
@@ -1213,7 +1214,8 @@ class Player:
                         break
                     sh, sw = f.shape[:2]
                     if (sw, sh) != (w, h):
-                        f = cv2.resize(f, (w, h), interpolation=cv2.INTER_AREA if w * h < sw * sh else cv2.INTER_CUBIC)
+                        from .core import fit_frame
+                        f = fit_frame(f, w, h)
                     if tmp is not None:
                         with (contextlib.nullcontext() if neuro else self._ink_gate):          # нейро: замок лише всередині моделі (на відеокарту), підготовка кадрів потоками паралельно
                             pk = np.packbits(binarize(f, w, h, Params.from_dict(pd), {"film": tmp} if neuro else {"state": tmp}), axis=-1)
