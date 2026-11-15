@@ -428,7 +428,7 @@ def _cache_file() -> str:
 def _key() -> str:
     ort = _ort()
     m = meta()
-    return f"v3|{getattr(ort, '__version__', '?')}|{','.join(providers_available())}|{m.get('sha', '')}"       # v3: у вердикті є ще й вибір режиму DirectML (dml_opts); v2 - вердикти старого способу заміру відкинуто
+    return f"v4|{getattr(ort, '__version__', '?')}|{','.join(providers_available())}|{m.get('sha', '')}"       # v4: режим DirectML міряється по черзі (v3 міг обрати повільніший через шум старту); v2 - вердикти старого способу заміру відкинуто
 
 
 def _bench(s: Student, w: int, h: int, reps: int = 6, warm: int = 3) -> float:
@@ -448,61 +448,67 @@ def _bench(s: Student, w: int, h: int, reps: int = 6, warm: int = 3) -> float:
 
 GPU_WINS = 0.85                                      # відеокарта береться, якщо її час менший за 85 % часу процесора (на 1080p реальний виграш - у 3-6 разів)
 DML_VARIANTS = ({"disable_metacommands": "true"},)   # режими DirectML, що пробуються після стандартного; береться швидший (різним відеокартам і драйверам пасують різні)
-DML_WINS = 0.97                                      # інший режим береться, лише якщо він швидший щонайменше на 3 %: на межі шуму лишається стандартний
+DML_TIE = 1.03                                       # інший режим береться, якщо він не повільніший за стандартний більш ніж на 3 %: сеанс зі стандартними метакомандами
+                                                     # у цій мережі буває «швидким» (12,6 мс) і «повільним» (14 мс) залежно від самого сеансу, а без метакоманд завжди ≈12,8 -
+                                                     # рівність у заміру означає, що стандартний у застосунку може опинитись у повільному стані
 
 
-def _bench_mask(s: Student, w: int, h: int, reps: int = 6, warm: int = 3) -> float:
-    """мс на запуск самої моделі (опис кадру й стабілізація не входять): найкращий з reps повторів. Порівнювати режими DirectML за повним binarize не можна:
-    ~4 мс процесорної частини розбавляють різницю модельної вдвічі (на RTX 4060: 5 % замість 10 %), і вона тоне в шумі"""
+def _bench_masks(ss: list, w: int, h: int, reps: int = 14, warm: int = 4) -> list[float]:
+    """мс на запуск самої моделі для кожного сеансу (опис кадру й стабілізація не входять): медіана з reps раундів, а в кожному раунді сеанси йдуть ПО ЧЕРЗІ.
+    Порівнювати режими DirectML за повним binarize не можна: ~4 мс процесорної частини розбавляють різницю модельної вдвічі (на RTX 4060: 5 % замість 10 %).
+    Послідовні заміри теж не годяться: перший запуск програми міряє посеред старту (читання файла, інтерфейс), і шум одного режиму проти іншого обирав
+    повільніший (у зібраному exe вийшло 14,9 проти 15,7 мс при справжніх 12,5 проти 14,0); по черзі шум б'є по обох однаково"""
     rng = np.random.default_rng(1)
     img = (rng.random((h, w, 3)) * 255).astype(np.uint8)
-    film, _ = s.film(img, h)
-    for _ in range(warm):
-        s.mask(img, film)
-    best = float("inf")
+    films = [s.film(img, h)[0] for s in ss]
+    for s, f in zip(ss, films):
+        for _ in range(warm):
+            s.mask(img, f)
+    times: list[list[float]] = [[] for _ in ss]
     for _ in range(max(1, reps)):
-        t0 = time.perf_counter()
-        s.mask(img, film)
-        best = min(best, time.perf_counter() - t0)
-    return best * 1000.0
+        for i, (s, f) in enumerate(zip(ss, films)):
+            t0 = time.perf_counter()
+            s.mask(img, f)
+            times[i].append(time.perf_counter() - t0)
+    return [sorted(t)[len(t) // 2] * 1000.0 for t in times]       # медіана, не мінімум: мінімум - «щасливий» запуск, а відео рахується на сталому часі (режим з метакомандами має ширший розкид)
 
 
 def _pick_dml_mode(res: dict, base: Student, base_ms: float, ref_img, ref, w: int, h: int) -> float:
     """DirectML на NVIDIA з «метакомандами» (готові ядра драйвера) у цієї мережі повільніший за загальні ядра: на RTX 4060 1080p 12,5 проти 14,0 мс (-10 %), маска
-    різниться у 0,014 % пікселів (шум fp16). На інших відеокартах може бути навпаки, тож міряємо обидва режими (саму модель) і лишаємо швидший.
+    різниться у 0,014 % пікселів (шум fp16). На інших відеокартах може бути навпаки, тож міряємо обидва режими (саму модель, по черзі) і лишаємо швидший.
     Повертає мс повного кадру в обраному режимі; DML_OPTS виставлено під нього (звільнення програного сеансу - збирач сміття)"""
-    best, best_s = {}, None
-    tried = {}
-    try:
-        best_mask = _bench_mask(base, w, h)
-        tried[""] = round(best_mask, 1)
-    except Exception as e:  # noqa: BLE001
-        _log(f"режим DirectML: стандартний не вдалося виміряти ({e})")
-        DML_OPTS.clear()
-        res["dml_opts"], res["dml_tried"] = {}, tried
-        return base_ms
+    tried: dict = {}
+    cands = [("", {}, base)]
     for opts in DML_VARIANTS:
         key = ",".join(f"{a}={b}" for a, b in opts.items())
         try:
             DML_OPTS.clear()
             DML_OPTS.update(opts)
             s = Student("dml")
-            agree = float((s.binarize(ref_img) == ref).mean())
-            if agree < 0.97:
+            if float((s.binarize(ref_img) == ref).mean()) < 0.97:
                 tried[key] = None
                 continue
-            ms = _bench_mask(s, w, h)
-            tried[key] = round(ms, 1)
-            if ms < best_mask * DML_WINS:
-                best, best_mask, best_s = dict(opts), ms, s
+            cands.append((key, dict(opts), s))
         except Exception as e:  # noqa: BLE001
             tried[key] = None
             _log(f"режим DirectML {key}: не вдалося ({e})")
+    pick = 0
+    if len(cands) > 1:
+        try:
+            ms = _bench_masks([c[2] for c in cands], w, h)
+            for (key, _, _), m in zip(cands, ms):
+                tried[key] = round(m, 1)
+            ok = [i for i in range(1, len(cands)) if ms[i] <= ms[0] * DML_TIE]       # «рівно» - на користь режиму без метакоманд: його час стабільний
+            if ok:
+                pick = min(ok, key=lambda i: ms[i])
+        except Exception as e:  # noqa: BLE001
+            _log(f"режим DirectML: не вдалося виміряти ({e}); лишається стандартний")
+            pick = 0
     DML_OPTS.clear()
-    DML_OPTS.update(best)
-    res["dml_opts"] = dict(best)
+    DML_OPTS.update(cands[pick][1])
+    res["dml_opts"] = dict(cands[pick][1])
     res["dml_tried"] = tried
-    return round(_bench(best_s, w, h), 1) if best_s is not None else base_ms
+    return round(_bench(cands[pick][2], w, h), 1) if pick else base_ms
 
 
 def probe(w: int = 1920, h: int = 1080, save: bool = True) -> dict:

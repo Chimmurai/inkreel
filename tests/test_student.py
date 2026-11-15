@@ -289,7 +289,7 @@ def test_probe_keeps_the_faster_directml_mode(monkeypatch, fast_variant, expect)
     img = _img(64, 64)
     _FakeDml.ref = np.ones((64, 64), np.uint8)
     monkeypatch.setattr(R, "Student", _FakeDml)
-    monkeypatch.setattr(R, "_bench_mask", lambda s, w, h, reps=6, warm=3: (8.0 if fast_variant else 12.0) if s.opts else 10.0)     # сама модель
+    monkeypatch.setattr(R, "_bench_masks", lambda ss, w, h, reps=10, warm=3: [((8.0 if fast_variant else 12.0) if s.opts else 10.0) for s in ss])     # сама модель
     monkeypatch.setattr(R, "_bench", lambda s, w, h, reps=6, warm=3: 15.0 if s.opts else 20.0)                                     # повний кадр
     res = {}
     ms = R._pick_dml_mode(res, _FakeDml("dml"), 20.0, img, _FakeDml.ref, 64, 64)
@@ -305,11 +305,29 @@ def test_probe_ignores_a_directml_mode_that_changes_the_mask_or_fails(monkeypatc
         def binarize(self, img, st=None):
             return np.zeros((64, 64), np.uint8) if self.opts else _FakeDml.ref
     monkeypatch.setattr(R, "Student", Odd)
-    monkeypatch.setattr(R, "_bench_mask", lambda s, w, h, reps=6, warm=3: 1.0 if s.opts else 10.0)
+    monkeypatch.setattr(R, "_bench_masks", lambda ss, w, h, reps=10, warm=3: [1.0 if s.opts else 10.0 for s in ss])
     res = {}
     assert R._pick_dml_mode(res, Odd("dml"), 10.0, img, _FakeDml.ref, 64, 64) == 10.0 and R.DML_OPTS == {}
     monkeypatch.setattr(R, "Student", lambda backend, profile=False: (_ for _ in ()).throw(RuntimeError("no such option")))
     assert R._pick_dml_mode({}, Odd("dml"), 10.0, img, _FakeDml.ref, 64, 64) == 10.0 and R.DML_OPTS == {}
+
+
+def test_directml_modes_are_measured_in_turns_not_one_after_another(monkeypatch):
+    """шум старту б'є по обох режимах однаково: сеанси мають іти по черзі в кожному раунді (у зібраному exe послідовний замір обрав повільніший режим)"""
+    order = []
+
+    class S:
+        def __init__(self, tag):
+            self.tag = tag
+
+        def film(self, img, h):
+            return [], None
+
+        def mask(self, img, film):
+            order.append(self.tag)
+            return np.zeros(1)
+    R._bench_masks([S("a"), S("b")], 64, 64, reps=4, warm=1)
+    assert order == ["a", "b"] + ["a", "b"] * 4
 
 
 def test_cached_directml_mode_is_restored_on_start(monkeypatch):
