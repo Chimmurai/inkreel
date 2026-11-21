@@ -74,12 +74,13 @@ pixel art
 Files are in store/listing_assets/screenshots, the en_* set. One caption per screenshot, in this order.
 
 1. Engraving: every pixel is ink or paper, and the strokes follow the shapes of the picture.
-2. IRNM1, InkReel's own neural network, on a lake at dawn. Palette: Ink & paper.
+2. IRNM1, InkReel's own neural network, on a pine forest. Palette: Ink & paper.
 3. The Drawing level with the Cyanotype palette: strokes, dots and grain chosen by what is in the picture.
 4. Halftone with the Sepia palette: the tones are made of noise, like in a newspaper.
 5. Symbols mode: the frame is built from monospaced font characters. Palette: Terminal.
-6. The Outline level with the Carmine palette, on dunes seen from above.
+6. The Outline level with the Carmine palette: a fast, local threshold that keeps the lines.
 7. IRNM1 with the Amber palette. 20 two-colour palettes, and one click turns any of them inside out.
+8. Engraving on a moonlit sea: stars, clouds and water drawn with nothing but ink and paper.
 
 ## Notes for certification
 

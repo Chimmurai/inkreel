@@ -7,7 +7,9 @@ on the film is another scene, also run through the app. No text anywhere, as the
     python tools/make_listing_art.py     ->  store/listing_assets/SuperHeroArt_1920x1080.png, SuperHeroArt_3840x2160.png,
                                               StoreBoxArt_1080x1080.png, StorePosterArt_1440x2160.png
 
-The box art is a plain square of the same sea, with no film on it. The 4K hero and the poster are the same drawing doubled with nearest-neighbour, so every dot stays a crisp square, like a 2x zoom in the app.
+The box art is a plain square of the same sea, with no film on it. Everything is drawn on a small sheet (hero 960x540, box 540x540, poster 480x720) and then enlarged
+with nearest-neighbour by a whole number (the 1080p hero x2, the 4K hero x4, the poster x3, the box x2), so every dot stays a crisp square, like a zoom in the app.
+Why chunky: the Store shows this art far smaller than its size, under a dark veil, and a 1-px dither melts into grey grain there.
 Needs the scenes first (tools/make_listing_scenes.py) and the project environment: it calls `python -m benvid`, and the IRNM1 or DirectML
 parts need onnxruntime in that environment (this script itself only uses Engraving)."""
 from __future__ import annotations
@@ -160,8 +162,8 @@ def put(out, v, c, halo=0, haze=0.0):
     out[c] = v[c]
 
 
-def dust(out, seed, rows, count=170):
-    """specks and a few scratches, like old film"""
+def dust(out, seed, rows, count=170, s=1.0):
+    """specks and a few scratches, like old film (`s` scales the scratch length for a smaller sheet)"""
     H, W = out.shape
     rs = np.random.RandomState(seed)
     for _ in range(count):
@@ -169,47 +171,54 @@ def dust(out, seed, rows, count=170):
         out[y:y + int(rs.randint(1, 3)), x:x + int(rs.randint(1, 3))] = True
     for _ in range(3):
         x, y0 = int(rs.randint(W // 10, W - W // 10)), int(rs.randint(rows[0], rows[0] + (rows[1] - rows[0]) // 3))
-        for y in range(y0, y0 + int(rs.randint(120, 300)), 3):
-            out[y:y + 2, x] = True
+        for y in range(y0, y0 + int(rs.randint(120, 300) * s), 2):
+            out[y:y + 1, x] = True
 
 
 # ------------------------------------------------------------------------------------------------------------------------ the sheets
 def hero() -> None:
-    H, W = 1080, 1920
+    """drawn on a 960x540 sheet (every dot is later 2 px on the 1080p file and 4 px on the 4K one): the Store shows the art far smaller than its size
+    and with a dark veil over it, and a 1-bit dither with 1 px dots melts into grey there, while chunky dots keep their shape"""
+    s = 0.5
+    H, W = int(1080 * s), int(1920 * s)
+    r = lambda v: max(1, int(round(v * s)))                                           # a length in 1080p units -> sheet pixels
     base = render(HERO_SCENE, None, H, 5)
-    base[:LETTERBOX] = False
-    base[H - LETTERBOX:] = False
+    lb = r(LETTERBOX)
+    base[:lb] = False
+    base[H - lb:] = False
     out = base.copy()
     # far: small and hazy, seen through the night air
-    put(out, *lay(swag(-120, 1010, 4, 215), Strip(26, 24, 1), (H, W), 5), haze=0.62)
-    put(out, *lay(swag(1010, 2100, 4, 150), Strip(26, 24, 2), (H, W), 17), haze=0.62)
+    put(out, *lay(swag(-120 * s, 1010 * s, 4 * s, 215 * s), Strip(r(26), r(24), 1), (H, W), 3), haze=0.62)
+    put(out, *lay(swag(1010 * s, 2100 * s, 4 * s, 150 * s), Strip(r(26), r(24), 2), (H, W), 9), haze=0.62)
     # mid
-    put(out, *lay(swag(-160, 900, 24, 330), Strip(58, 56, 3), (H, W), 0), halo=5)
-    put(out, *lay(swag(900, 2080, 24, 120), Strip(58, 56, 4), (H, W), 37), halo=5)
+    put(out, *lay(swag(-160 * s, 900 * s, 24 * s, 330 * s), Strip(r(58), r(56), 3), (H, W), 0), halo=3)
+    put(out, *lay(swag(900 * s, 2080 * s, 24 * s, 120 * s), Strip(r(58), r(56), 4), (H, W), 19), halo=3)
     # near: big, in front of everything, cut by the frame
-    put(out, *lay(swag(-430, 540, -70, 580), Strip(92, 88, 5), (H, W), 11), halo=8)
+    put(out, *lay(swag(-430 * s, 540 * s, -70 * s, 580 * s), Strip(r(92), r(88), 5), (H, W), 6), halo=4)
     t = np.linspace(0, 1, 6000)
-    put(out, *lay(path(1745 + 95 * np.sin(t * 2.6) + 40 * t, -150 + t * 740), Strip(70, 66, 6), (H, W), 23), halo=7)
-    dust(out, 21, (150, 930))
-    save(out, "SuperHeroArt_1920x1080.png")
-    save(out, "SuperHeroArt_3840x2160.png", 2)
+    put(out, *lay(path((1745 + 95 * np.sin(t * 2.6) + 40 * t) * s, (-150 + t * 740) * s), Strip(r(70), r(66), 6), (H, W), 12), halo=4)
+    dust(out, 21, (r(150), r(930)), 45, 0.5)
+    save(out, "SuperHeroArt_1920x1080.png", 2)
+    save(out, "SuperHeroArt_3840x2160.png", 4)
 
 
 def box() -> None:
-    """a plain square: the moon, the sloop and the sea, nothing laid over it"""
-    out = render(HERO_SCENE, (840, 110, 820, 820), 1080, 5)
-    save(out, "StoreBoxArt_1080x1080.png")
+    """a plain square: the moon, the sloop and the sea, nothing laid over it (drawn at 540 px, doubled)"""
+    out = render(HERO_SCENE, (840, 110, 820, 820), 540, 5)
+    save(out, "StoreBoxArt_1080x1080.png", 2)
 
 
 def poster() -> None:
-    H, W = 1080, 720                                                                  # drawn at half size, then doubled
+    s = 2 / 3                                                                          # drawn on 480x720, then every dot is 3 px
+    H, W = int(round(1080 * s)), int(round(720 * s))
+    r = lambda v: max(1, int(round(v * s)))
     out = render(HERO_SCENE, (W / H, 0.705), H, 5).copy()
-    put(out, *lay(swag(-60, 800, 2, 120), Strip(22, 20, 21), (H, W), 3), haze=0.62)
-    put(out, *lay(swag(-120, 860, -14, 210), Strip(42, 40, 22), (H, W), 7), halo=4)
+    put(out, *lay(swag(-60 * s, 800 * s, 2 * s, 120 * s), Strip(r(22), r(20), 21), (H, W), 2), haze=0.62)
+    put(out, *lay(swag(-120 * s, 860 * s, -14 * s, 210 * s), Strip(r(42), r(40), 22), (H, W), 4), halo=2)
     t = np.linspace(0, 1, 5000)
-    put(out, *lay(path(70 + 50 * np.sin(t * 3.2 + 0.4), -120 + t * 700), Strip(62, 58, 23), (H, W), 19), halo=6)
-    dust(out, 24, (30, H - 30), 70)
-    save(out, "StorePosterArt_1440x2160.png", 2)
+    put(out, *lay(path((70 + 50 * np.sin(t * 3.2 + 0.4)) * s, (-120 + t * 700) * s), Strip(r(62), r(58), 23), (H, W), 10), halo=3)
+    dust(out, 24, (15, H - 15), 20, 0.5)
+    save(out, "StorePosterArt_1440x2160.png", 3)
 
 
 def main() -> int:

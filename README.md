@@ -6,9 +6,9 @@
 
 InkReel is a free Windows 10/11 (64-bit) app that turns video, photos and GIFs into pure black and white: every pixel is either ink or paper, with dots, strokes and grain chosen by what is in the frame.
 
-**Website:** https://inkreel.raimex.space  
-**Microsoft Store:** https://apps.microsoft.com/detail/9NW62SPG91ZR  
-**Download:** [latest release](https://github.com/Chimmurai/inkreel/releases/latest) (`InkReel-Setup.exe`)
+**Microsoft Store:** https://apps.microsoft.com/detail/9NW62SPG91ZR (free, updates itself)  
+**Website:** https://inkreel.raimex.space · [gallery of results](https://inkreel.raimex.space/en/gallery/) · [privacy](https://inkreel.raimex.space/en/privacy/)  
+**Installer:** [latest release](https://github.com/Chimmurai/inkreel/releases/latest) (`InkReel-Setup.exe`) · **Source:** this repository
 
 > **Official sources.** InkReel is made by Raimex and is published in exactly three places: this repository, the [Microsoft Store](https://apps.microsoft.com/detail/9NW62SPG91ZR) and the [website](https://inkreel.raimex.space). The release page lists the SHA-256 of every installer. Copies from anywhere else are not ours.
 
@@ -36,6 +36,8 @@ Requirements: Windows 10 or newer, 64-bit, 4 GB of memory (8 or more recommended
 - **Interface:** Ukrainian and English; the installer language becomes the app language.
 
 Everything runs locally on your computer. See the [privacy policy](https://inkreel.raimex.space/en/privacy/).
+
+See what it makes: the [gallery](https://inkreel.raimex.space/en/gallery/) on the website shows the same frames as pixel art and as symbols, free to reuse under CC BY 4.0. Get the app from the [Microsoft Store](https://apps.microsoft.com/detail/9NW62SPG91ZR) or the [latest release](https://github.com/Chimmurai/inkreel/releases/latest).
 
 ## Run from source
 
